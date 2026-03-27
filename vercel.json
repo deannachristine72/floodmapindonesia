@@ -2,11 +2,11 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "RAILWAY_URL_PLACEHOLDER/api/:path*"
+      "destination": "https://geodata-api-production.up.railway.app/api/:path*"
     },
     {
       "source": "/health",
-      "destination": "RAILWAY_URL_PLACEHOLDER/health"
+      "destination": "https://geodata-api-production.up.railway.app/health"
     }
   ]
 }
