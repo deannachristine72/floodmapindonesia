@@ -85,8 +85,13 @@
 
     // Tunggu map style selesai load sebelum menambahkan layer PMTiles
     map.on('load', () => {
-      addPmtilesLayer();
-      loadData();  // Load data awal
+      // requestAnimationFrame menjamin CSS layout sudah settled sebelum resize()
+      // Fix BUG-02: map blank saat fresh load karena container height mismatch
+      requestAnimationFrame(() => {
+        map.resize();       // Sinkronisasi canvas dengan dimensi container aktual
+        addPmtilesLayer();
+        loadData();         // Load data awal setelah dimensi benar
+      });
     });
 
     // Reload polygon saat viewport berubah (dengan debounce 400ms)
