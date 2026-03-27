@@ -3,114 +3,126 @@
   import maplibregl from 'maplibre-gl';
   import { Protocol } from 'pmtiles';
   import { MapboxOverlay } from '@deck.gl/mapbox';
-  import { GeoJsonLayer } from 'deck.gl';
-  import { fetchPolygons, fetchHeatmap } from '$lib/api';
+  import { GeoJsonLayer, ScatterplotLayer } from 'deck.gl';
+  import { fetchPolygons, fetchHeatmap, fetchCentroids, fetchBoundary } from '$lib/api';
   import { intensityToRgba, polygonFillColor, POLYGON_LINE_COLOR, HEATMAP_LINE_COLOR } from '$lib/colorScale';
-  import type { LayerMode, PickedFeature, PolygonProperties, KotaHeatmapProperties } from '$lib/types';
+  import type { LayerMode, PickedFeature, PolygonProperties, KotaHeatmapProperties, CentroidPoint } from '$lib/types';
 
   // ─── Props (Svelte 5 runes) ─────────────────────────────────────────────────
   let {
     selectedYear = $bindable<number | null>(null),
-    layerMode    = $bindable<LayerMode>('polygons'),
+    layerMode    = $bindable<LayerMode>('centroids'),
+    featureCount = $bindable<number>(0),
+    loading      = $bindable<boolean>(false),
+    selectedBoundaryHasc = null,
   }: {
     selectedYear: number | null;
     layerMode: LayerMode;
+    featureCount: number;
+    loading: boolean;
+    selectedBoundaryHasc: string | null;
   } = $props();
 
   // ─── State ──────────────────────────────────────────────────────────────────
   let mapContainer: HTMLDivElement;
   let map: maplibregl.Map;
   let deckOverlay: InstanceType<typeof MapboxOverlay>;
-  let loading = $state(false);
-  let featureCount = $state(0);
   let pickedFeature = $state<PickedFeature | null>(null);
   let errorMsg = $state<string | null>(null);
 
-  // Cache heatmap agar tidak re-fetch saat pindah viewport (hanya berubah per tahun)
+  // Cache heatmap agar tidak re-fetch saat pindah viewport
   let heatmapCache: Record<string, object> = {};
 
   // AbortController untuk membatalkan fetch yang sudah tidak relevan
-  let polygonAbort: AbortController | null = null;
+  let dataAbort: AbortController | null = null;
 
   // Debounce timer untuk moveend
   let moveDebounce: ReturnType<typeof setTimeout> | null = null;
 
   // ─── Konstanta ──────────────────────────────────────────────────────────────
-  // PMTiles: batas administratif Indonesia (zoom 0-10)
-  // Ganti dengan URL GitHub Pages Anda jika sudah deploy
   const PMTILES_URL = 'https://deannachristine72.github.io/indonesia-pmtiles/indonesia.pmtiles';
-
-  // Basemap CartoDB Voyager — memerlukan koneksi internet
   const BASEMAP_STYLE = 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json';
+
+  // Warna centroid — teal seperti referensi
+  const CENTROID_COLOR: [number, number, number, number] = [0, 148, 136, 190];
+  const CENTROID_HIGHLIGHT: [number, number, number, number] = [255, 200, 0, 220];
 
   // ─── Setup MapLibre + deck.gl ────────────────────────────────────────────────
   onMount(async () => {
-    // Daftarkan protokol pmtiles sebelum inisialisasi map
     const pmtilesProtocol = new Protocol();
     maplibregl.addProtocol('pmtiles', pmtilesProtocol.tile);
 
-    // Inisialisasi MapLibre
     map = new maplibregl.Map({
       container: mapContainer,
       style: BASEMAP_STYLE,
-      center: [118.0, -2.5],   // Tengah Indonesia
+      center: [118.0, -2.5],
       zoom: 5,
       minZoom: 3,
       maxZoom: 18,
     });
 
-    map.addControl(new maplibregl.NavigationControl(), 'top-right');
-    map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
+    map.addControl(new maplibregl.NavigationControl(), 'top-left');
+    map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left');
 
-    // Inisialisasi deck.gl overlay dalam mode overlay (non-interleaved)
-    // Mode interleaved tidak kompatibel dengan MapLibre GL v5 karena shader injection gagal
     deckOverlay = new MapboxOverlay({
       interleaved: false,
       layers: [],
-      // Callback saat user klik feature deck.gl
       onClick: (info) => {
         if (!info.picked) {
           pickedFeature = null;
           return;
         }
-        pickedFeature = {
-          type: layerMode,
-          properties: info.object?.properties,
-          coordinates: [info.coordinate?.[0] ?? 0, info.coordinate?.[1] ?? 0],
-        };
+        // Untuk centroid, data berupa array [lon, lat, area, year, uuid]
+        if (layerMode === 'centroids' && Array.isArray(info.object)) {
+          const d = info.object as CentroidPoint;
+          pickedFeature = {
+            type: 'centroids',
+            properties: {
+              uuid: d[4],
+              area_km2: d[2],
+              year: d[3],
+              start_date: '',
+              end_date: '',
+            } as PolygonProperties,
+            coordinates: [d[0], d[1]],
+          };
+        } else {
+          pickedFeature = {
+            type: layerMode,
+            properties: info.object?.properties,
+            coordinates: [info.coordinate?.[0] ?? 0, info.coordinate?.[1] ?? 0],
+          };
+        }
       },
     });
 
     map.addControl(deckOverlay as unknown as maplibregl.IControl);
 
-    // Tunggu map style selesai load sebelum menambahkan layer PMTiles
     map.on('load', () => {
-      // requestAnimationFrame menjamin CSS layout sudah settled sebelum resize()
-      // Fix BUG-02: map blank saat fresh load karena container height mismatch
       requestAnimationFrame(() => {
-        map.resize();       // Sinkronisasi canvas dengan dimensi container aktual
+        map.resize();
         addPmtilesLayer();
-        loadData();         // Load data awal setelah dimensi benar
+        addBoundarySource();
+        loadData();
       });
     });
 
-    // Reload polygon saat viewport berubah (dengan debounce 400ms)
+    // Reload data saat viewport berubah (centroid & polygon mode)
     map.on('moveend', () => {
-      if (layerMode !== 'polygons') return;
+      if (layerMode === 'heatmap') return;
       if (moveDebounce) clearTimeout(moveDebounce);
-      moveDebounce = setTimeout(() => loadPolygons(), 400);
+      moveDebounce = setTimeout(() => loadData(), 400);
     });
   });
 
   onDestroy(() => {
     if (moveDebounce) clearTimeout(moveDebounce);
-    polygonAbort?.abort();
+    dataAbort?.abort();
     map?.remove();
   });
 
   // ─── PMTiles Layer (batas wilayah Indonesia) ─────────────────────────────────
   function addPmtilesLayer() {
-    // Tambahkan source PMTiles — protocol pmtiles:// sudah didaftarkan
     map.addSource('indonesia-admin', {
       type: 'vector',
       url: `pmtiles://${PMTILES_URL}`,
@@ -118,20 +130,18 @@
       maxzoom: 10,
     });
 
-    // Layer batas provinsi — garis putih tipis, zoom 4-10
     map.addLayer({
       id: 'admin-provinsi',
       type: 'line',
       source: 'indonesia-admin',
-      'source-layer': 'province',  // nama layer di file PMTiles
+      'source-layer': 'province',
       minzoom: 4,
       paint: {
-        'line-color': 'rgba(255,255,255,0.6)',
+        'line-color': 'rgba(100,100,100,0.4)',
         'line-width': ['interpolate', ['linear'], ['zoom'], 4, 0.5, 10, 1.5],
       },
     });
 
-    // Layer batas kabupaten — zoom 7+
     map.addLayer({
       id: 'admin-kab',
       type: 'line',
@@ -139,18 +149,137 @@
       'source-layer': 'regency',
       minzoom: 7,
       paint: {
-        'line-color': 'rgba(255,255,255,0.3)',
+        'line-color': 'rgba(100,100,100,0.25)',
         'line-width': ['interpolate', ['linear'], ['zoom'], 7, 0.3, 12, 1],
       },
     });
   }
 
+  // ─── Boundary Source + Layer untuk highlight kota yang dipilih ────────────────
+  function addBoundarySource() {
+    // Source GeoJSON kosong — diisi saat user pilih kota dari search
+    map.addSource('selected-boundary', {
+      type: 'geojson',
+      data: { type: 'FeatureCollection', features: [] },
+    });
+
+    // Fill transparan
+    map.addLayer({
+      id: 'selected-boundary-fill',
+      type: 'fill',
+      source: 'selected-boundary',
+      paint: {
+        'fill-color': '#f97316',
+        'fill-opacity': 0.06,
+      },
+    });
+
+    // Outline tebal oranye
+    map.addLayer({
+      id: 'selected-boundary-line',
+      type: 'line',
+      source: 'selected-boundary',
+      paint: {
+        'line-color': '#f97316',
+        'line-width': 2.5,
+        'line-opacity': 0.9,
+      },
+    });
+  }
+
+  // ─── Update Boundary saat kota dipilih ───────────────────────────────────────
+  async function updateBoundary(hascCode: string | null) {
+    if (!map || !map.getSource('selected-boundary')) return;
+
+    if (!hascCode) {
+      // Hapus boundary
+      (map.getSource('selected-boundary') as maplibregl.GeoJSONSource).setData({
+        type: 'FeatureCollection',
+        features: [],
+      });
+      return;
+    }
+
+    try {
+      const feature = await fetchBoundary(hascCode);
+      (map.getSource('selected-boundary') as maplibregl.GeoJSONSource).setData(
+        feature as GeoJSON.Feature
+      );
+    } catch (err) {
+      console.error('Gagal memuat boundary kota:', err);
+    }
+  }
+
+  // ─── Expose flyTo untuk dipanggil dari parent ────────────────────────────────
+  export function flyTo(center: [number, number], zoom = 10) {
+    if (!map) return;
+    map.flyTo({ center, zoom, duration: 1500 });
+  }
+
   // ─── Load Data Berdasarkan Mode ───────────────────────────────────────────────
   function loadData() {
-    if (layerMode === 'polygons') {
+    if (layerMode === 'centroids') {
+      loadCentroids();
+    } else if (layerMode === 'polygons') {
       loadPolygons();
     } else {
       loadHeatmap();
+    }
+  }
+
+  // ─── Fetch + Render Centroid Points ──────────────────────────────────────────
+  async function loadCentroids() {
+    if (!map || !deckOverlay) return;
+
+    dataAbort?.abort();
+    dataAbort = new AbortController();
+
+    const bounds = map.getBounds();
+    const params = {
+      minLon: bounds.getWest(),
+      minLat: bounds.getSouth(),
+      maxLon: bounds.getEast(),
+      maxLat: bounds.getNorth(),
+      year: selectedYear,
+      limit: 8000,
+    };
+
+    loading = true;
+    errorMsg = null;
+
+    try {
+      const data = await fetchCentroids(params, dataAbort.signal);
+      featureCount = data.meta.count;
+
+      deckOverlay.setProps({
+        layers: [
+          new ScatterplotLayer({
+            id: 'deforest-centroids',
+            data: data.points,
+            getPosition: (d: CentroidPoint) => [d[0], d[1]],
+            // Radius proporsional √area — area besar = titik besar
+            getRadius: (d: CentroidPoint) => Math.max(200, Math.sqrt(d[2]) * 80),
+            radiusUnits: 'meters',
+            radiusMinPixels: 3,
+            radiusMaxPixels: 25,
+            getFillColor: CENTROID_COLOR,
+            pickable: true,
+            pickingRadius: 5,
+            autoHighlight: true,
+            highlightColor: CENTROID_HIGHLIGHT,
+            updateTriggers: {
+              getPosition: selectedYear,
+            },
+          }),
+        ],
+      });
+    } catch (err: unknown) {
+      if ((err as Error).name !== 'AbortError') {
+        errorMsg = 'Gagal memuat data centroid. Periksa backend FastAPI.';
+        console.error(err);
+      }
+    } finally {
+      loading = false;
     }
   }
 
@@ -158,9 +287,8 @@
   async function loadPolygons() {
     if (!map || !deckOverlay) return;
 
-    // Batalkan request sebelumnya jika masih berjalan
-    polygonAbort?.abort();
-    polygonAbort = new AbortController();
+    dataAbort?.abort();
+    dataAbort = new AbortController();
 
     const bounds = map.getBounds();
     const params = {
@@ -176,7 +304,7 @@
     errorMsg = null;
 
     try {
-      const data = await fetchPolygons(params, polygonAbort.signal);
+      const data = await fetchPolygons(params, dataAbort.signal);
       featureCount = data.features.length;
 
       deckOverlay.setProps({
@@ -184,14 +312,13 @@
           new GeoJsonLayer({
             id: 'deforest-polygons',
             data: data,
-            // Render polygon fill dengan warna berdasarkan area
             getFillColor: (f: { properties: PolygonProperties }) =>
               polygonFillColor(f.properties.area_km2),
             getLineColor: POLYGON_LINE_COLOR,
             lineWidthMinPixels: 0.5,
             lineWidthMaxPixels: 2,
             pickable: true,
-            pickingRadius: 5, // Fix BUG-03: perluas area klik agar polygon kecil lebih mudah dipilih
+            pickingRadius: 5,
             autoHighlight: true,
             highlightColor: [255, 255, 0, 100],
             updateTriggers: {
@@ -220,7 +347,6 @@
     errorMsg = null;
 
     try {
-      // Gunakan cache jika sudah ada
       if (!heatmapCache[cacheKey]) {
         heatmapCache[cacheKey] = await fetchHeatmap(selectedYear);
       }
@@ -237,7 +363,7 @@
             getLineColor: HEATMAP_LINE_COLOR,
             lineWidthMinPixels: 0.3,
             pickable: true,
-            pickingRadius: 5, // Fix BUG-03: perluas area klik untuk heatmap juga
+            pickingRadius: 5,
             autoHighlight: true,
             highlightColor: [255, 255, 255, 60],
             updateTriggers: {
@@ -254,24 +380,16 @@
     }
   }
 
-  // ─── Helper: Cari Label Layer MapLibre untuk Interleaved Rendering ────────────
-  function getFirstLabelLayerId(): string | undefined {
-    if (!map) return undefined;
-    const layers = map.getStyle()?.layers ?? [];
-    const labelLayer = layers.find(
-      (l) => l.type === 'symbol' && (l.id.includes('label') || l.id.includes('place'))
-    );
-    return labelLayer?.id;
-  }
-
   // ─── Reaktif: Reload saat year atau mode berubah ──────────────────────────────
   $effect(() => {
-    // Effect ini berjalan setiap kali selectedYear atau layerMode berubah
-    // Pastikan map dan overlay sudah siap
     if (!map || !deckOverlay) return;
-    // Clear heatmap cache jika tahun berubah sehingga data fresh
     pickedFeature = null;
     loadData();
+  });
+
+  // Reaktif: Update boundary saat selectedBoundaryHasc berubah
+  $effect(() => {
+    updateBoundary(selectedBoundaryHasc);
   });
 </script>
 
@@ -301,22 +419,29 @@
 
   <!-- Feature Count Badge -->
   {#if !loading && featureCount > 0}
-    <div class="absolute bottom-10 left-4 z-10
+    <div class="absolute bottom-4 left-4 z-10
                 bg-black/70 text-white text-xs px-3 py-1.5 rounded-full">
       {featureCount.toLocaleString('id-ID')}
-      {layerMode === 'polygons' ? 'polygon' : 'kab/kota'}
+      {layerMode === 'centroids' ? 'titik' : layerMode === 'polygons' ? 'polygon' : 'kab/kota'}
       {selectedYear != null ? `(${selectedYear})` : '(semua tahun)'}
     </div>
   {/if}
 
   <!-- Info Panel — Klik Feature -->
   {#if pickedFeature}
-    <div class="absolute bottom-20 left-4 z-10 w-72
+    <div class="absolute bottom-14 left-4 z-10 w-72
                 bg-gray-900/95 text-white rounded-xl shadow-xl overflow-hidden">
       <!-- Header -->
-      <div class="flex items-center justify-between px-4 py-3 bg-orange-700/80">
+      <div class="flex items-center justify-between px-4 py-3
+                  {pickedFeature.type === 'heatmap' ? 'bg-teal-700/80' : 'bg-teal-600/80'}">
         <span class="font-semibold text-sm">
-          {pickedFeature.type === 'polygons' ? 'Polygon Deforestasi' : 'Kabupaten / Kota'}
+          {#if pickedFeature.type === 'centroids'}
+            Titik Deforestasi
+          {:else if pickedFeature.type === 'polygons'}
+            Polygon Deforestasi
+          {:else}
+            Kabupaten / Kota
+          {/if}
         </span>
         <button
           class="text-white/70 hover:text-white text-lg leading-none"
@@ -326,7 +451,7 @@
 
       <!-- Properties -->
       <div class="px-4 py-3 space-y-1.5 text-sm">
-        {#if pickedFeature.type === 'polygons'}
+        {#if pickedFeature.type === 'centroids' || pickedFeature.type === 'polygons'}
           {@const p = pickedFeature.properties as PolygonProperties}
           <div class="flex justify-between">
             <span class="text-gray-400">UUID</span>
@@ -334,16 +459,27 @@
           </div>
           <div class="flex justify-between">
             <span class="text-gray-400">Luas</span>
-            <span class="font-semibold text-orange-300">{p.area_km2.toLocaleString('id-ID', { maximumFractionDigits: 2 })} km²</span>
+            <span class="font-semibold text-teal-300">{p.area_km2.toLocaleString('id-ID', { maximumFractionDigits: 2 })} km²</span>
           </div>
-          <div class="flex justify-between">
-            <span class="text-gray-400">Tanggal Mulai</span>
-            <span>{p.start_date}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-gray-400">Tanggal Akhir</span>
-            <span>{p.end_date}</span>
-          </div>
+          {#if pickedFeature.type === 'centroids'}
+            <div class="flex justify-between">
+              <span class="text-gray-400">Tahun</span>
+              <span>{p.year}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-400">Koordinat</span>
+              <span class="font-mono text-xs">{pickedFeature.coordinates[0].toFixed(4)}, {pickedFeature.coordinates[1].toFixed(4)}</span>
+            </div>
+          {:else}
+            <div class="flex justify-between">
+              <span class="text-gray-400">Tanggal Mulai</span>
+              <span>{p.start_date}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-400">Tanggal Akhir</span>
+              <span>{p.end_date}</span>
+            </div>
+          {/if}
         {:else}
           {@const p = pickedFeature.properties as KotaHeatmapProperties}
           <div class="flex justify-between">
@@ -356,7 +492,7 @@
           </div>
           <div class="flex justify-between">
             <span class="text-gray-400">Jumlah Event</span>
-            <span class="font-semibold text-orange-300">{p.record_count.toLocaleString('id-ID')}</span>
+            <span class="font-semibold text-teal-300">{p.record_count.toLocaleString('id-ID')}</span>
           </div>
           <div class="flex justify-between">
             <span class="text-gray-400">Total Luas</span>
@@ -374,6 +510,22 @@
             <div class="text-right text-xs text-gray-400 mt-0.5">{(p.intensity * 100).toFixed(1)}%</div>
           </div>
         {/if}
+      </div>
+    </div>
+  {/if}
+
+  <!-- Heatmap Legend -->
+  {#if layerMode === 'heatmap'}
+    <div class="absolute bottom-4 right-4 z-10
+                bg-gray-900/95 backdrop-blur rounded-xl px-3 py-2.5 shadow-xl
+                text-xs text-white w-36">
+      <div class="font-semibold mb-2 text-gray-300">Intensitas</div>
+      <div class="h-2.5 w-full rounded mb-1"
+           style="background: linear-gradient(to right, #228b22, #9acd32, #ffc800, #ff6400, #c80000)">
+      </div>
+      <div class="flex justify-between text-gray-400">
+        <span>Rendah</span>
+        <span>Tinggi</span>
       </div>
     </div>
   {/if}

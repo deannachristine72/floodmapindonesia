@@ -46,7 +46,7 @@ export interface PolygonMeta {
 
 // ─── UI State Types ───────────────────────────────────────────────────────────
 
-export type LayerMode = 'polygons' | 'heatmap';
+export type LayerMode = 'centroids' | 'polygons' | 'heatmap';
 
 export interface MapViewport {
   minLon: number;
@@ -59,4 +59,31 @@ export interface PickedFeature {
   type: LayerMode;
   properties: PolygonProperties | KotaHeatmapProperties;
   coordinates: [number, number];
+}
+
+// ─── Centroid Types ──────────────────────────────────────────────────────────
+export type CentroidPoint = [number, number, number, number, string]; // [lon, lat, area_km2, year, uuid]
+
+export interface CentroidResponse {
+  points: CentroidPoint[];
+  meta: { count: number; year: number | null; bbox: number[]; limit: number };
+}
+
+// ─── Search Types ────────────────────────────────────────────────────────────
+export interface KotaSearchItem {
+  hasc_code: string;
+  kota_name: string;
+  kota_type: string;
+  provinsi: string;
+  centroid: [number, number];
+  bbox: [number, number, number, number];
+}
+
+// ─── Stats Types ─────────────────────────────────────────────────────────────
+export interface StatsData {
+  total_events: number;
+  date_range: [string | null, string | null];
+  avg_area_km2: number;
+  max_area_km2: number;
+  total_area_km2: number;
 }
