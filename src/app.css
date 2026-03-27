@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* MapLibre GL CSS — wajib untuk rendering map */
+@import 'maplibre-gl/dist/maplibre-gl.css';
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+/* Sembunyikan MapLibre attribution yang terlalu besar */
+.maplibregl-ctrl-attrib {
+  font-size: 10px !important;
+}
+
+/* Sembunyikan luma.gl shader compilation warning overlay (dev mode only) */
+.luma-compiler-log-error,
+.luma-compiler-log-warning {
+  display: none !important;
+}
+
+/* Sembunyikan parent button overlay yang dibuat luma.gl secara dinamis */
+button:has(.luma-compiler-log-error),
+button:has(.luma-compiler-log-warning) {
+  display: none !important;
+}

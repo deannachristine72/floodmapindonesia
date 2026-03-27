@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "RAILWAY_URL_PLACEHOLDER/api/:path*"
+    },
+    {
+      "source": "/health",
+      "destination": "RAILWAY_URL_PLACEHOLDER/health"
+    }
+  ]
+}
