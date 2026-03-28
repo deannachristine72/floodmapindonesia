@@ -29,7 +29,7 @@ export interface PolygonParams {
 export async function fetchPolygons(
   params: PolygonParams,
   signal?: AbortSignal
-): Promise<FeatureCollection<PolygonProperties>> {
+): Promise<FeatureCollection<PolygonProperties> | null> {
   const p = new URLSearchParams({
     min_lon: String(params.minLon),
     min_lat: String(params.minLat),
@@ -39,9 +39,14 @@ export async function fetchPolygons(
   });
   if (params.year != null) p.set('year', String(params.year));
 
-  const res = await fetch(`${BASE}/api/polygons?${p}`, { signal });
-  if (!res.ok) throw new Error(`fetchPolygons: ${res.status} ${res.statusText}`);
-  return res.json();
+  try {
+    const res = await fetch(`${BASE}/api/polygons?${p}`, { signal });
+    if (!res.ok) throw new Error(`fetchPolygons: ${res.status} ${res.statusText}`);
+    return res.json();
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') return null;
+    throw err;
+  }
 }
 
 // ─── Heatmap Kota (pre-computed, cached di server) ───────────────────────────
@@ -49,14 +54,19 @@ export async function fetchPolygons(
 export async function fetchHeatmap(
   year?: number | null,
   signal?: AbortSignal
-): Promise<FeatureCollection<KotaHeatmapProperties>> {
+): Promise<FeatureCollection<KotaHeatmapProperties> | null> {
   const url = year != null
     ? `${BASE}/api/heatmap/kota?year=${year}`
     : `${BASE}/api/heatmap/kota`;
 
-  const res = await fetch(url, { signal });
-  if (!res.ok) throw new Error(`fetchHeatmap: ${res.status} ${res.statusText}`);
-  return res.json();
+  try {
+    const res = await fetch(url, { signal });
+    if (!res.ok) throw new Error(`fetchHeatmap: ${res.status} ${res.statusText}`);
+    return res.json();
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') return null;
+    throw err;
+  }
 }
 
 // ─── Daftar Tahun ─────────────────────────────────────────────────────────────
@@ -73,7 +83,7 @@ export async function fetchYears(): Promise<YearCount[]> {
 export async function fetchCentroids(
   params: PolygonParams,
   signal?: AbortSignal
-): Promise<CentroidResponse> {
+): Promise<CentroidResponse | null> {
   const p = new URLSearchParams({
     min_lon: String(params.minLon),
     min_lat: String(params.minLat),
@@ -83,9 +93,14 @@ export async function fetchCentroids(
   });
   if (params.year != null) p.set('year', String(params.year));
 
-  const res = await fetch(`${BASE}/api/centroids?${p}`, { signal });
-  if (!res.ok) throw new Error(`fetchCentroids: ${res.status} ${res.statusText}`);
-  return res.json();
+  try {
+    const res = await fetch(`${BASE}/api/centroids?${p}`, { signal });
+    if (!res.ok) throw new Error(`fetchCentroids: ${res.status} ${res.statusText}`);
+    return res.json();
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') return null;
+    throw err;
+  }
 }
 
 // ─── Search Kota (load all 386 kota untuk autocomplete) ──────────────────────
