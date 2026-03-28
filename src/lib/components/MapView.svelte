@@ -249,6 +249,7 @@
 
     try {
       const data = await fetchCentroids(params, dataAbort.signal);
+      if (data === null) return; // request di-abort, tidak perlu update UI
       featureCount = data.meta.count;
 
       deckOverlay.setProps({
@@ -305,6 +306,7 @@
 
     try {
       const data = await fetchPolygons(params, dataAbort.signal);
+      if (data === null) return; // request di-abort, tidak perlu update UI
       featureCount = data.features.length;
 
       deckOverlay.setProps({
@@ -348,7 +350,9 @@
 
     try {
       if (!heatmapCache[cacheKey]) {
-        heatmapCache[cacheKey] = await fetchHeatmap(selectedYear);
+        const fetched = await fetchHeatmap(selectedYear);
+        if (fetched === null) return; // request di-abort
+        heatmapCache[cacheKey] = fetched;
       }
       const data = heatmapCache[cacheKey] as { features: Array<{ properties: KotaHeatmapProperties }> };
       featureCount = data.features?.length ?? 0;
