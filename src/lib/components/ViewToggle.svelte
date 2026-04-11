@@ -2,15 +2,24 @@
   import type { LayerMode } from '$lib/types';
 
   let {
-    layerMode = $bindable<LayerMode>('centroids'),
+    layerMode    = $bindable<LayerMode>('centroids'),
+    featureCount = 0,
   }: {
     layerMode: LayerMode;
+    featureCount: number;
   } = $props();
 
   const modes: { value: LayerMode; label: string; icon: string }[] = [
     { value: 'centroids', label: 'Centroid',  icon: '◉' },
     { value: 'heatmap',   label: 'Heatmap',   icon: '■' },
   ];
+
+  // C4: Label dinamis di bawah tombol mode
+  const countLabel = $derived(
+    featureCount > 0
+      ? `Menampilkan ${featureCount.toLocaleString('id-ID')} ${layerMode === 'centroids' ? 'titik' : 'kab/kota'}`
+      : null
+  );
 </script>
 
 <div class="space-y-1.5">
@@ -29,4 +38,8 @@
       </button>
     {/each}
   </div>
+  <!-- C4: Deskripsi dinamis jumlah fitur tampil -->
+  {#if countLabel}
+    <div class="text-[11px] text-gray-500 px-1 leading-tight">{countLabel}</div>
+  {/if}
 </div>

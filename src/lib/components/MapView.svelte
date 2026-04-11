@@ -37,6 +37,14 @@
   let heatmapRankMap = $state(new Map<string, number>());
   let totalKotaCount = $state(0);
 
+  // C5: Hover tooltip centroid
+  let hoveredCentroid = $state<{ x: number; y: number; area: number; year: number } | null>(null);
+
+  // C6: Admin context (point-in-polygon lookup terhadap heatmap cache)
+  let centroidKotaContext = $state<{ kota_name: string; provinsi: string } | null>(null);
+  let centroidKotaChecked = $state(false); // true = lookup selesai (context null = tidak ditemukan)
+  let lookupSeq = 0;                        // guard race condition rapid click
+
   // AbortController untuk membatalkan fetch yang sudah tidak relevan
   let dataAbort: AbortController | null = null;
 
@@ -73,10 +81,12 @@
       onClick: (info) => {
         if (!info.picked) {
           pickedFeature = null;
+          centroidKotaContext = null;
+          centroidKotaChecked = false;
           return;
         }
         // Untuk centroid, data berupa array [lon, lat, area, year, uuid]
-        if (layerMode === 'centroids' && Array.isArray(info.object)) {
+        if (layerMode === 'centroids' && Array.isArray(info.object) && (info.object as unknown[]).length >= 5) {
           const d = info.object as CentroidPoint;
           pickedFeature = {
             type: 'centroids',
@@ -89,7 +99,13 @@
             } as PolygonProperties,
             coordinates: [d[0], d[1]],
           };
+          // C6: lookup kota/provinsi — fire and forget, result updates reaktif
+          centroidKotaContext = null;
+          centroidKotaChecked = false;
+          lookupKotaContext(d[0], d[1]);
         } else {
+          centroidKotaContext = null;
+          centroidKotaChecked = false;
           pickedFeature = {
             type: 'heatmap',
             properties: info.object?.properties,
@@ -312,6 +328,15 @@
             radiusMaxPixels: 25,
             // C2: Warna berdasarkan severity area_km²
             getFillColor: (d: CentroidPoint) => centroidSeverityColor(d[2]),
+            // C5: Tooltip hover — tampilkan mini-info tanpa klik
+            onHover: (info: { picked: boolean; object: unknown; x: number; y: number }) => {
+              if (info.picked && Array.isArray(info.object) && (info.object as unknown[]).length >= 5) {
+                const d = info.object as CentroidPoint;
+                hoveredCentroid = { x: info.x, y: info.y, area: d[2], year: d[3] };
+              } else {
+                hoveredCentroid = null;
+              }
+            },
             pickable: true,
             pickingRadius: 5,
             autoHighlight: true,
@@ -336,6 +361,9 @@
   // ─── Fetch + Render Heatmap Kota ─────────────────────────────────────────────
   async function loadHeatmap() {
     if (!map || !deckOverlay) return;
+
+    // C5: bersihkan tooltip hover saat beralih ke heatmap
+    hoveredCentroid = null;
 
     const cacheKey = selectedYear != null ? String(selectedYear) : 'all';
 
@@ -404,6 +432,69 @@
     }
   }
 
+  // ─── C6: Point-in-Polygon (even-odd rule, semua rings termasuk hole) ─────────
+  function pointInPolygon(point: [number, number], rings: number[][][]): boolean {
+    const [x, y] = point;
+    let inside = false;
+    for (const ring of rings) {
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const xi = ring[i][0], yi = ring[i][1];
+        const xj = ring[j][0], yj = ring[j][1];
+        if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) {
+          inside = !inside;
+        }
+      }
+    }
+    return inside;
+  }
+
+  async function lookupKotaContext(lon: number, lat: number) {
+    const seq = ++lookupSeq;
+    centroidKotaContext = null;
+    centroidKotaChecked = false;
+
+    // Gunakan cache 'all' — geometri kota tidak berubah per tahun
+    if (!heatmapCache['all']) {
+      try {
+        const data = await fetchHeatmap(null);
+        if (data) heatmapCache['all'] = data;
+        else { if (seq === lookupSeq) centroidKotaChecked = true; return; }
+      } catch {
+        if (seq === lookupSeq) centroidKotaChecked = true;
+        return;
+      }
+    }
+
+    if (seq !== lookupSeq) return; // request lebih baru sudah berjalan
+
+    const cached = heatmapCache['all'] as {
+      features: Array<{ geometry: { type: string; coordinates: unknown }; properties: KotaHeatmapProperties }>;
+    };
+    if (!cached?.features) { centroidKotaChecked = true; return; }
+
+    const pt: [number, number] = [lon, lat];
+    for (const feature of cached.features) {
+      const geom = feature.geometry;
+      if (!geom) continue;
+      let found = false;
+      if (geom.type === 'Polygon') {
+        found = pointInPolygon(pt, geom.coordinates as number[][][]);
+      } else if (geom.type === 'MultiPolygon') {
+        for (const poly of (geom.coordinates as number[][][][])) {
+          if (pointInPolygon(pt, poly)) { found = true; break; }
+        }
+      }
+      if (found) {
+        if (seq === lookupSeq) {
+          centroidKotaContext = { kota_name: feature.properties.kota_name, provinsi: feature.properties.provinsi };
+          centroidKotaChecked = true;
+        }
+        return;
+      }
+    }
+    if (seq === lookupSeq) centroidKotaChecked = true; // tidak ditemukan
+  }
+
   // ─── Reaktif: Reload saat year atau mode berubah ──────────────────────────────
   $effect(() => {
     if (!map || !deckOverlay) return;
@@ -451,6 +542,18 @@
     </div>
   {/if}
 
+  <!-- C5: Tooltip hover centroid — mini info tanpa klik -->
+  {#if hoveredCentroid && layerMode === 'centroids' && !pickedFeature}
+    <div class="absolute z-20 pointer-events-none
+                bg-gray-900/95 border border-gray-700 text-white text-xs px-2.5 py-1.5 rounded-lg shadow-xl"
+         style="left: {hoveredCentroid.x + 14}px; top: {Math.max(4, hoveredCentroid.y - 52)}px;">
+      <div class="font-semibold text-teal-300">
+        {hoveredCentroid.area.toLocaleString('id-ID', { maximumFractionDigits: 2 })} km²
+      </div>
+      <div class="text-gray-400">{hoveredCentroid.year}</div>
+    </div>
+  {/if}
+
   <!-- Info Panel — Klik Feature -->
   {#if pickedFeature}
     <div class="absolute z-10 bottom-0 left-0 right-0 w-full rounded-t-xl sm:bottom-14 sm:left-4 sm:right-auto sm:w-72 sm:rounded-xl max-h-[50vh] overflow-y-auto
@@ -475,6 +578,24 @@
       <div class="px-4 py-3 space-y-1.5 text-sm">
         {#if pickedFeature.type === 'centroids'}
           {@const p = pickedFeature.properties as PolygonProperties}
+          <!-- C6: Konteks administratif dari point-in-polygon lookup -->
+          {#if centroidKotaContext}
+            <div class="flex justify-between">
+              <span class="text-gray-400">Provinsi</span>
+              <span class="text-right max-w-[60%] leading-tight">{centroidKotaContext.provinsi}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-400">Kota/Kab</span>
+              <span class="font-semibold text-teal-300 text-right max-w-[60%] leading-tight">{centroidKotaContext.kota_name}</span>
+            </div>
+          {:else if !centroidKotaChecked}
+            <div class="text-gray-500 text-xs italic">Mencari lokasi…</div>
+          {:else}
+            <div class="flex justify-between">
+              <span class="text-gray-400">Wilayah</span>
+              <span class="text-gray-500">—</span>
+            </div>
+          {/if}
           <div class="flex justify-between">
             <span class="text-gray-400">UUID</span>
             <span class="font-mono text-xs">{p.uuid.slice(0, 12)}…</span>

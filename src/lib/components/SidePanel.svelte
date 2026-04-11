@@ -56,7 +56,7 @@
     <div class="border-t border-gray-800"></div>
 
     <!-- View Toggle -->
-    <ViewToggle bind:layerMode />
+    <ViewToggle bind:layerMode featureCount={showingOnMap} />
   </div>
 
   <!-- Footer / Selected Kota -->
