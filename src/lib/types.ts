@@ -46,7 +46,7 @@ export interface PolygonMeta {
 
 // ─── UI State Types ───────────────────────────────────────────────────────────
 
-export type LayerMode = 'centroids' | 'polygons' | 'heatmap';
+export type LayerMode = 'centroids' | 'heatmap';
 
 export interface MapViewport {
   minLon: number;

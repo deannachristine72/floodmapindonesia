@@ -9,7 +9,6 @@
 
   const modes: { value: LayerMode; label: string; icon: string }[] = [
     { value: 'centroids', label: 'Centroid',  icon: '◉' },
-    { value: 'polygons',  label: 'Polygon',   icon: '△' },
     { value: 'heatmap',   label: 'Heatmap',   icon: '■' },
   ];
 </script>

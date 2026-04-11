@@ -4,9 +4,9 @@
   import { Protocol } from 'pmtiles';
   import { MapboxOverlay } from '@deck.gl/mapbox';
   import { GeoJsonLayer, ScatterplotLayer } from 'deck.gl';
-  import { fetchPolygons, fetchHeatmap, fetchCentroids, fetchBoundary } from '$lib/api';
-  import { intensityToRgba, polygonFillColor, POLYGON_LINE_COLOR, HEATMAP_LINE_COLOR } from '$lib/colorScale';
-  import type { LayerMode, PickedFeature, PolygonProperties, KotaHeatmapProperties, CentroidPoint } from '$lib/types';
+  import { fetchHeatmap, fetchCentroids, fetchBoundary } from '$lib/api';
+  import { intensityToRgba, HEATMAP_LINE_COLOR } from '$lib/colorScale';
+  import type { LayerMode, PickedFeature, KotaHeatmapProperties, CentroidPoint, PolygonProperties } from '$lib/types';
 
   // ─── Props (Svelte 5 runes) ─────────────────────────────────────────────────
   let {
@@ -88,7 +88,7 @@
           };
         } else {
           pickedFeature = {
-            type: layerMode,
+            type: 'heatmap',
             properties: info.object?.properties,
             coordinates: [info.coordinate?.[0] ?? 0, info.coordinate?.[1] ?? 0],
           };
@@ -107,7 +107,7 @@
       });
     });
 
-    // Reload data saat viewport berubah (centroid & polygon mode)
+    // Reload data saat viewport berubah (centroid mode)
     map.on('moveend', () => {
       if (layerMode === 'heatmap') return;
       if (moveDebounce) clearTimeout(moveDebounce);
@@ -220,8 +220,6 @@
   function loadData() {
     if (layerMode === 'centroids') {
       loadCentroids();
-    } else if (layerMode === 'polygons') {
-      loadPolygons();
     } else {
       loadHeatmap();
     }
@@ -277,61 +275,6 @@
     } catch (err: unknown) {
       if ((err as Error).name !== 'AbortError') {
         errorMsg = 'Gagal memuat data centroid. Periksa backend FastAPI.';
-        console.error(err);
-      }
-    } finally {
-      loading = false;
-    }
-  }
-
-  // ─── Fetch + Render Polygon Deforestasi ───────────────────────────────────────
-  async function loadPolygons() {
-    if (!map || !deckOverlay) return;
-
-    dataAbort?.abort();
-    dataAbort = new AbortController();
-
-    const bounds = map.getBounds();
-    const params = {
-      minLon: bounds.getWest(),
-      minLat: bounds.getSouth(),
-      maxLon: bounds.getEast(),
-      maxLat: bounds.getNorth(),
-      year: selectedYear,
-      limit: 5000,
-    };
-
-    loading = true;
-    errorMsg = null;
-
-    try {
-      const data = await fetchPolygons(params, dataAbort.signal);
-      if (data === null) return; // request di-abort, tidak perlu update UI
-      featureCount = data.features.length;
-
-      deckOverlay.setProps({
-        layers: [
-          new GeoJsonLayer({
-            id: 'deforest-polygons',
-            data: data,
-            getFillColor: (f: { properties: PolygonProperties }) =>
-              polygonFillColor(f.properties.area_km2),
-            getLineColor: POLYGON_LINE_COLOR,
-            lineWidthMinPixels: 0.5,
-            lineWidthMaxPixels: 2,
-            pickable: true,
-            pickingRadius: 5,
-            autoHighlight: true,
-            highlightColor: [255, 255, 0, 100],
-            updateTriggers: {
-              getFillColor: selectedYear,
-            },
-          }),
-        ],
-      });
-    } catch (err: unknown) {
-      if ((err as Error).name !== 'AbortError') {
-        errorMsg = 'Gagal memuat data polygon. Periksa backend FastAPI.';
         console.error(err);
       }
     } finally {
@@ -426,7 +369,7 @@
     <div class="absolute bottom-4 left-4 z-10
                 bg-black/70 text-white text-xs px-3 py-1.5 rounded-full">
       {featureCount.toLocaleString('id-ID')}
-      {layerMode === 'centroids' ? 'titik' : layerMode === 'polygons' ? 'polygon' : 'kab/kota'}
+      {layerMode === 'centroids' ? 'titik' : 'kab/kota'}
       {selectedYear != null ? `(${selectedYear})` : '(semua tahun)'}
     </div>
   {/if}
@@ -441,8 +384,6 @@
         <span class="font-semibold text-sm">
           {#if pickedFeature.type === 'centroids'}
             Titik Deforestasi
-          {:else if pickedFeature.type === 'polygons'}
-            Polygon Deforestasi
           {:else}
             Kabupaten / Kota
           {/if}
@@ -455,7 +396,7 @@
 
       <!-- Properties -->
       <div class="px-4 py-3 space-y-1.5 text-sm">
-        {#if pickedFeature.type === 'centroids' || pickedFeature.type === 'polygons'}
+        {#if pickedFeature.type === 'centroids'}
           {@const p = pickedFeature.properties as PolygonProperties}
           <div class="flex justify-between">
             <span class="text-gray-400">UUID</span>
@@ -465,25 +406,14 @@
             <span class="text-gray-400">Luas</span>
             <span class="font-semibold text-teal-300">{p.area_km2.toLocaleString('id-ID', { maximumFractionDigits: 2 })} km²</span>
           </div>
-          {#if pickedFeature.type === 'centroids'}
-            <div class="flex justify-between">
-              <span class="text-gray-400">Tahun</span>
-              <span>{p.year}</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-gray-400">Koordinat</span>
-              <span class="font-mono text-xs">{pickedFeature.coordinates[0].toFixed(4)}, {pickedFeature.coordinates[1].toFixed(4)}</span>
-            </div>
-          {:else}
-            <div class="flex justify-between">
-              <span class="text-gray-400">Tanggal Mulai</span>
-              <span>{p.start_date}</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-gray-400">Tanggal Akhir</span>
-              <span>{p.end_date}</span>
-            </div>
-          {/if}
+          <div class="flex justify-between">
+            <span class="text-gray-400">Tahun</span>
+            <span>{p.year}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-gray-400">Koordinat</span>
+            <span class="font-mono text-xs">{pickedFeature.coordinates[0].toFixed(4)}, {pickedFeature.coordinates[1].toFixed(4)}</span>
+          </div>
         {:else}
           {@const p = pickedFeature.properties as KotaHeatmapProperties}
           <div class="flex justify-between">
