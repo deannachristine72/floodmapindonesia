@@ -44,7 +44,7 @@
     <div class="border-t border-gray-800"></div>
 
     <!-- Stats -->
-    <StatsPanel {stats} {showingOnMap} loading={statsLoading} />
+    <StatsPanel {stats} {showingOnMap} loading={statsLoading} {layerMode} />
 
     <!-- Divider -->
     <div class="border-t border-gray-800"></div>
