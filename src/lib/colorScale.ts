@@ -61,6 +61,14 @@ export function centroidSeverityColor(area_km2: number, alpha = 200): [number, n
   return               [159, 18,  57,  alpha];        // merah tua / crimson
 }
 
+// H2: Kelas legend heatmap dengan nilai aktual record_count
+export const HEATMAP_LEGEND_CLASSES = [
+  { label: '< 100 event',     color: '#228b22', desc: 'Rendah'        },
+  { label: '100–500 event',   color: '#ffc800', desc: 'Sedang'        },
+  { label: '500–2.000 event', color: '#ff6400', desc: 'Tinggi'        },
+  { label: '> 2.000 event',   color: '#c80000', desc: 'Sangat Tinggi' },
+] as const;
+
 // C1: Kelas severity untuk legenda — size field menggantikan ternary string-matching
 export const CENTROID_SEVERITY_CLASSES = [
   { label: '< 1 km²',    color: '#FCD34D', desc: 'Kecil',        size: 8  },

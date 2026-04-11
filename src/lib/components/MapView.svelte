@@ -5,7 +5,7 @@
   import { MapboxOverlay } from '@deck.gl/mapbox';
   import { GeoJsonLayer, ScatterplotLayer } from 'deck.gl';
   import { fetchHeatmap, fetchCentroids, fetchBoundary } from '$lib/api';
-  import { intensityToRgba, HEATMAP_LINE_COLOR, centroidSeverityColor, CENTROID_SEVERITY_CLASSES } from '$lib/colorScale';
+  import { intensityToRgba, HEATMAP_LINE_COLOR, centroidSeverityColor, CENTROID_SEVERITY_CLASSES, HEATMAP_LEGEND_CLASSES } from '$lib/colorScale';
   import type { LayerMode, PickedFeature, KotaHeatmapProperties, CentroidPoint, PolygonProperties } from '$lib/types';
 
   // ─── Props (Svelte 5 runes) ─────────────────────────────────────────────────
@@ -32,6 +32,10 @@
 
   // Cache heatmap agar tidak re-fetch saat pindah viewport
   let heatmapCache: Record<string, object> = {};
+
+  // H3: Rank map — hasc_code → peringkat nasional (1 = terparah)
+  let heatmapRankMap = $state(new Map<string, number>());
+  let totalKotaCount = $state(0);
 
   // AbortController untuk membatalkan fetch yang sudah tidak relevan
   let dataAbort: AbortController | null = null;
@@ -154,6 +158,20 @@
     });
   }
 
+  // ─── H1: Hitung centroid bbox dari geometry ───────────────────────────────────
+  function getGeomCenter(geometry: { type: string; coordinates: unknown }): [number, number] {
+    let sumLon = 0, sumLat = 0, count = 0;
+    const processRing = (ring: number[][]) => {
+      for (const pt of ring) { sumLon += pt[0]; sumLat += pt[1]; count++; }
+    };
+    if (geometry.type === 'Polygon') {
+      processRing((geometry.coordinates as number[][][])[0]);
+    } else if (geometry.type === 'MultiPolygon') {
+      for (const poly of (geometry.coordinates as number[][][][])) processRing(poly[0]);
+    }
+    return count > 0 ? [sumLon / count, sumLat / count] : [0, 0];
+  }
+
   // ─── Boundary Source + Layer untuk highlight kota yang dipilih ────────────────
   function addBoundarySource() {
     // Source GeoJSON kosong — diisi saat user pilih kota dari search
@@ -182,6 +200,31 @@
         'line-color': '#f97316',
         'line-width': 2.5,
         'line-opacity': 0.9,
+      },
+    });
+
+    // H1: Source titik centroid kota untuk label — diisi saat heatmap load
+    map.addSource('kota-label-points', {
+      type: 'geojson',
+      data: { type: 'FeatureCollection', features: [] },
+    });
+
+    // H1: Symbol layer label nama kota — hanya muncul zoom ≥ 7
+    map.addLayer({
+      id: 'kota-labels-layer',
+      type: 'symbol',
+      source: 'kota-label-points',
+      minzoom: 7,
+      layout: {
+        'text-field': ['get', 'kota_name'],
+        'text-size': ['interpolate', ['linear'], ['zoom'], 7, 9, 12, 12],
+        'text-anchor': 'center',
+        'text-max-width': 8,
+      },
+      paint: {
+        'text-color': '#ffffff',
+        'text-halo-color': 'rgba(0,0,0,0.75)',
+        'text-halo-width': 1.5,
       },
     });
   }
@@ -227,6 +270,13 @@
   // ─── Fetch + Render Centroid Points ──────────────────────────────────────────
   async function loadCentroids() {
     if (!map || !deckOverlay) return;
+
+    // H1: Bersihkan label kota saat beralih dari heatmap ke centroid
+    if (map.getSource('kota-label-points')) {
+      (map.getSource('kota-label-points') as maplibregl.GeoJSONSource).setData({
+        type: 'FeatureCollection', features: [],
+      });
+    }
 
     dataAbort?.abort();
     dataAbort = new AbortController();
@@ -298,13 +348,39 @@
         if (fetched === null) return; // request di-abort
         heatmapCache[cacheKey] = fetched;
       }
-      const data = heatmapCache[cacheKey] as { features: Array<{ properties: KotaHeatmapProperties }> };
+      const data = heatmapCache[cacheKey] as {
+        features: Array<{ geometry: { type: string; coordinates: unknown }; properties: KotaHeatmapProperties }>;
+      };
       featureCount = data.features?.length ?? 0;
+
+      // H3: Build rank map — urutkan desc record_count, simpan peringkat per hasc_code
+      const sorted = [...data.features].sort(
+        (a, b) => b.properties.record_count - a.properties.record_count
+      );
+      heatmapRankMap = new Map(sorted.map((f, i) => [f.properties.hasc_code, i + 1]));
+      totalKotaCount = data.features.length;
+
+      // H1: Update label points source — centroid tiap kota untuk zoom ≥ 7
+      if (map.getSource('kota-label-points')) {
+        const labelFeatures = data.features
+          .filter(f => f.geometry)
+          .map(f => ({
+            type: 'Feature' as const,
+            geometry: { type: 'Point', coordinates: getGeomCenter(f.geometry) },
+            properties: { kota_name: f.properties.kota_name },
+          }));
+        (map.getSource('kota-label-points') as maplibregl.GeoJSONSource).setData({
+          type: 'FeatureCollection',
+          features: labelFeatures,
+        });
+      }
 
       deckOverlay.setProps({
         layers: [
           new GeoJsonLayer({
             id: 'kota-heatmap',
+            // H1: render heatmap di bawah label layer agar label tetap terbaca
+            beforeId: 'kota-labels-layer',
             data: data,
             getFillColor: (f: { properties: KotaHeatmapProperties }) =>
               intensityToRgba(f.properties.intensity, 200),
@@ -444,23 +520,54 @@
             </div>
             <div class="text-right text-xs text-gray-400 mt-0.5">{(p.intensity * 100).toFixed(1)}%</div>
           </div>
+
+          <!-- H3: Peringkat Nasional -->
+          {#if heatmapRankMap.has(p.hasc_code) && totalKotaCount > 0}
+            {@const rank = heatmapRankMap.get(p.hasc_code)!}
+            {@const pct = Math.max(1, Math.ceil((rank / totalKotaCount) * 100))}
+            <div class="mt-2 pt-2 border-t border-gray-700">
+              <div class="flex items-center justify-between">
+                <span class="text-gray-400 text-xs">Peringkat Nasional</span>
+                <span class="font-bold text-orange-400 text-sm">
+                  #{rank}
+                  <span class="text-gray-400 font-normal text-xs">/ {totalKotaCount}</span>
+                </span>
+              </div>
+              <div class="text-[10px] text-gray-500 text-right mt-0.5">
+                {#if pct <= 10}
+                  Top {pct}% deforestasi tertinggi
+                {:else}
+                  Persentil ke-{pct} nasional
+                {/if}
+              </div>
+            </div>
+          {/if}
         {/if}
       </div>
     </div>
   {/if}
 
-  <!-- Heatmap Legend -->
+  <!-- H2: Heatmap Legend — 4 kelas dengan nilai aktual record_count -->
   {#if layerMode === 'heatmap'}
     <div class="absolute bottom-4 right-4 z-10
-                bg-gray-900/95 backdrop-blur rounded-xl px-3 py-2.5 shadow-xl
-                text-xs text-white w-36">
-      <div class="font-semibold mb-2 text-gray-300">Intensitas</div>
-      <div class="h-2.5 w-full rounded mb-1"
-           style="background: linear-gradient(to right, #228b22, #9acd32, #ffc800, #ff6400, #c80000)">
+                bg-gray-900/95 backdrop-blur rounded-xl px-3 py-3 shadow-xl
+                text-xs text-white w-44">
+      <div class="font-semibold mb-2.5 text-gray-300 tracking-wide uppercase text-[10px]">
+        Intensitas Deforestasi
       </div>
-      <div class="flex justify-between text-gray-400">
-        <span>Rendah</span>
-        <span>Tinggi</span>
+      <div class="space-y-1.5">
+        {#each HEATMAP_LEGEND_CLASSES as cls}
+          <div class="flex items-center gap-2">
+            <span
+              class="w-3 h-3 rounded-sm shrink-0"
+              style="background-color: {cls.color}; box-shadow: 0 0 4px {cls.color}88;"
+            ></span>
+            <div class="flex flex-col leading-tight">
+              <span class="text-white font-medium">{cls.desc}</span>
+              <span class="text-gray-400">{cls.label}</span>
+            </div>
+          </div>
+        {/each}
       </div>
     </div>
   {/if}
