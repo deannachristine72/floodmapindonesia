@@ -5,7 +5,7 @@
   import { MapboxOverlay } from '@deck.gl/mapbox';
   import { GeoJsonLayer, ScatterplotLayer } from 'deck.gl';
   import { fetchHeatmap, fetchCentroids, fetchBoundary } from '$lib/api';
-  import { intensityToRgba, HEATMAP_LINE_COLOR, centroidSeverityColor, CENTROID_SEVERITY_CLASSES, HEATMAP_LEGEND_CLASSES } from '$lib/colorScale';
+  import { intensityToRgba, HEATMAP_LINE_COLOR, centroidSeverityColor, CENTROID_SEVERITY_CLASSES, HEATMAP_LEGEND_CLASSES, deltaColor, DELTA_LEGEND_CLASSES } from '$lib/colorScale';
   import type { LayerMode, PickedFeature, KotaHeatmapProperties, CentroidPoint, PolygonProperties } from '$lib/types';
 
   // ─── Props (Svelte 5 runes) ─────────────────────────────────────────────────
@@ -15,12 +15,16 @@
     featureCount = $bindable<number>(0),
     loading      = $bindable<boolean>(false),
     selectedBoundaryHasc = null,
+    compareYear  = $bindable<number | null>(null),
+    topKota      = $bindable<KotaHeatmapProperties[]>([]),
   }: {
     selectedYear: number | null;
     layerMode: LayerMode;
     featureCount: number;
     loading: boolean;
     selectedBoundaryHasc: string | null;
+    compareYear: number | null;
+    topKota: KotaHeatmapProperties[];
   } = $props();
 
   // ─── State ──────────────────────────────────────────────────────────────────
@@ -36,6 +40,11 @@
   // H3: Rank map — hasc_code → peringkat nasional (1 = terparah)
   let heatmapRankMap = $state(new Map<string, number>());
   let totalKotaCount = $state(0);
+
+  // H4/H5/H7: State heatmap
+  let hoveredKota = $state<{ x: number; y: number; kota_name: string; record_count: number; provinsi: string } | null>(null);
+  let compareKotaLookup = $state(new Map<string, KotaHeatmapProperties>());
+  let maxDelta = $state(0);
 
   // C5: Hover tooltip centroid
   let hoveredCentroid = $state<{ x: number; y: number; area: number; year: number } | null>(null);
@@ -293,6 +302,8 @@
         type: 'FeatureCollection', features: [],
       });
     }
+    hoveredKota = null; // H5: clear heatmap hover tooltip
+    topKota = [];       // H4: clear top kota list
 
     dataAbort?.abort();
     dataAbort = new AbortController();
@@ -362,8 +373,9 @@
   async function loadHeatmap() {
     if (!map || !deckOverlay) return;
 
-    // C5: bersihkan tooltip hover saat beralih ke heatmap
+    // C5/H5: bersihkan tooltip saat reload
     hoveredCentroid = null;
+    hoveredKota = null;
 
     const cacheKey = selectedYear != null ? String(selectedYear) : 'all';
 
@@ -381,12 +393,15 @@
       };
       featureCount = data.features?.length ?? 0;
 
-      // H3: Build rank map — urutkan desc record_count, simpan peringkat per hasc_code
+      // H3: Build rank map
       const sorted = [...data.features].sort(
         (a, b) => b.properties.record_count - a.properties.record_count
       );
       heatmapRankMap = new Map(sorted.map((f, i) => [f.properties.hasc_code, i + 1]));
       totalKotaCount = data.features.length;
+
+      // H4: Top 10 kota terparah
+      topKota = sorted.slice(0, 10).map(f => f.properties);
 
       // H1: Update label points source — centroid tiap kota untuk zoom ≥ 7
       if (map.getSource('kota-label-points')) {
@@ -403,15 +418,52 @@
         });
       }
 
+      // H7: Fetch compare year data jika mode komparasi aktif
+      if (compareYear !== null) {
+        const ck = String(compareYear);
+        if (!heatmapCache[ck]) {
+          const cd = await fetchHeatmap(compareYear);
+          if (cd) heatmapCache[ck] = cd;
+        }
+      }
+      const cmpFC = compareYear !== null
+        ? heatmapCache[String(compareYear)] as { features: Array<{ properties: KotaHeatmapProperties }> } | undefined
+        : undefined;
+
+      if (cmpFC) {
+        compareKotaLookup = new Map(cmpFC.features.map(f => [f.properties.hasc_code, f.properties]));
+        const diffs = data.features.map(f =>
+          Math.abs(f.properties.record_count - (compareKotaLookup.get(f.properties.hasc_code)?.record_count ?? 0))
+        );
+        maxDelta = Math.max(...diffs, 1);
+      } else {
+        compareKotaLookup = new Map();
+        maxDelta = 0;
+      }
+
       deckOverlay.setProps({
         layers: [
           new GeoJsonLayer({
             id: 'kota-heatmap',
-            // H1: render heatmap di bawah label layer agar label tetap terbaca
+            // H1: render di bawah label layer agar label tetap terbaca
             beforeId: 'kota-labels-layer',
             data: data,
-            getFillColor: (f: { properties: KotaHeatmapProperties }) =>
-              intensityToRgba(f.properties.intensity, 200),
+            // H7: delta color saat compare mode aktif, intensitas normal jika tidak
+            getFillColor: cmpFC
+              ? (f: { properties: KotaHeatmapProperties }) => {
+                  const delta = f.properties.record_count - (compareKotaLookup.get(f.properties.hasc_code)?.record_count ?? 0);
+                  return deltaColor(delta, maxDelta);
+                }
+              : (f: { properties: KotaHeatmapProperties }) => intensityToRgba(f.properties.intensity, 200),
+            // H5: Tooltip hover kota — mini summary tanpa klik
+            onHover: (info: { picked: boolean; object?: { properties: KotaHeatmapProperties }; x: number; y: number }) => {
+              if (info.picked && info.object?.properties) {
+                const p = info.object.properties;
+                hoveredKota = { x: info.x, y: info.y, kota_name: p.kota_name, record_count: p.record_count, provinsi: p.provinsi };
+              } else {
+                hoveredKota = null;
+              }
+            },
             getLineColor: HEATMAP_LINE_COLOR,
             lineWidthMinPixels: 0.3,
             pickable: true,
@@ -419,7 +471,7 @@
             autoHighlight: true,
             highlightColor: [255, 255, 255, 60],
             updateTriggers: {
-              getFillColor: selectedYear,
+              getFillColor: [selectedYear, compareYear],
             },
           }),
         ],
@@ -539,6 +591,17 @@
       {featureCount.toLocaleString('id-ID')}
       {layerMode === 'centroids' ? 'titik' : 'kab/kota'}
       {selectedYear != null ? `(${selectedYear})` : '(semua tahun)'}
+    </div>
+  {/if}
+
+  <!-- H5: Tooltip hover kota heatmap — mini summary tanpa klik -->
+  {#if hoveredKota && layerMode === 'heatmap' && !pickedFeature}
+    <div class="absolute z-20 pointer-events-none
+                bg-gray-900/95 border border-gray-700 text-white text-xs px-2.5 py-1.5 rounded-lg shadow-xl"
+         style="left: {hoveredKota.x + 14}px; top: {Math.max(4, hoveredKota.y - 64)}px;">
+      <div class="font-semibold text-teal-300">{hoveredKota.kota_name}</div>
+      <div class="text-gray-400 text-[10px]">{hoveredKota.provinsi}</div>
+      <div class="text-orange-300 font-medium mt-0.5">{hoveredKota.record_count.toLocaleString('id-ID')} event</div>
     </div>
   {/if}
 
@@ -663,33 +726,74 @@
               </div>
             </div>
           {/if}
+
+          <!-- H7: Komparasi tahun -->
+          {#if compareYear !== null && compareKotaLookup.has(p.hasc_code)}
+            {@const cp = compareKotaLookup.get(p.hasc_code)!}
+            {@const delta = p.record_count - cp.record_count}
+            <div class="mt-2 pt-2 border-t border-gray-700">
+              <div class="text-xs text-gray-400 mb-1.5">Dibandingkan {compareYear}</div>
+              <div class="flex justify-between text-xs">
+                <span class="text-gray-400">Event {compareYear}</span>
+                <span class="font-semibold">{cp.record_count.toLocaleString('id-ID')}</span>
+              </div>
+              <div class="flex justify-between text-xs mt-1">
+                <span class="text-gray-400">Perubahan</span>
+                <span class="font-bold {delta > 0 ? 'text-red-400' : delta < 0 ? 'text-green-400' : 'text-gray-400'}">
+                  {delta > 0 ? '+' : ''}{delta.toLocaleString('id-ID')}
+                </span>
+              </div>
+            </div>
+          {/if}
         {/if}
       </div>
     </div>
   {/if}
 
-  <!-- H2: Heatmap Legend — 4 kelas dengan nilai aktual record_count -->
+  <!-- H2/H7: Heatmap Legend — normal atau delta depending on compare mode -->
   {#if layerMode === 'heatmap'}
     <div class="absolute bottom-4 right-4 z-10
                 bg-gray-900/95 backdrop-blur rounded-xl px-3 py-3 shadow-xl
                 text-xs text-white w-44">
-      <div class="font-semibold mb-2.5 text-gray-300 tracking-wide uppercase text-[10px]">
-        Intensitas Deforestasi
-      </div>
-      <div class="space-y-1.5">
-        {#each HEATMAP_LEGEND_CLASSES as cls}
-          <div class="flex items-center gap-2">
-            <span
-              class="w-3 h-3 rounded-sm shrink-0"
-              style="background-color: {cls.color}; box-shadow: 0 0 4px {cls.color}88;"
-            ></span>
-            <div class="flex flex-col leading-tight">
-              <span class="text-white font-medium">{cls.desc}</span>
-              <span class="text-gray-400">{cls.label}</span>
+      {#if compareYear !== null}
+        <!-- H7: Delta legend -->
+        <div class="font-semibold mb-2.5 text-gray-300 tracking-wide uppercase text-[10px]">
+          vs {compareYear}
+        </div>
+        <div class="space-y-1.5">
+          {#each DELTA_LEGEND_CLASSES as cls}
+            <div class="flex items-center gap-2">
+              <span
+                class="w-3 h-3 rounded-sm shrink-0"
+                style="background-color: {cls.color}; box-shadow: 0 0 4px {cls.color}88;"
+              ></span>
+              <div class="flex flex-col leading-tight">
+                <span class="text-white font-medium">{cls.desc}</span>
+                <span class="text-gray-400">{cls.label}</span>
+              </div>
             </div>
-          </div>
-        {/each}
-      </div>
+          {/each}
+        </div>
+      {:else}
+        <!-- H2: Normal heatmap legend -->
+        <div class="font-semibold mb-2.5 text-gray-300 tracking-wide uppercase text-[10px]">
+          Intensitas Deforestasi
+        </div>
+        <div class="space-y-1.5">
+          {#each HEATMAP_LEGEND_CLASSES as cls}
+            <div class="flex items-center gap-2">
+              <span
+                class="w-3 h-3 rounded-sm shrink-0"
+                style="background-color: {cls.color}; box-shadow: 0 0 4px {cls.color}88;"
+              ></span>
+              <div class="flex flex-col leading-tight">
+                <span class="text-white font-medium">{cls.desc}</span>
+                <span class="text-gray-400">{cls.label}</span>
+              </div>
+            </div>
+          {/each}
+        </div>
+      {/if}
     </div>
   {/if}
 

@@ -3,7 +3,7 @@
   import MapView from '$lib/components/MapView.svelte';
   import SidePanel from '$lib/components/SidePanel.svelte';
   import { fetchYears, fetchSearchKota, fetchStats } from '$lib/api';
-  import type { LayerMode, YearCount, KotaSearchItem, StatsData } from '$lib/types';
+  import type { KotaHeatmapProperties, LayerMode, YearCount, KotaSearchItem, StatsData } from '$lib/types';
 
   // ─── State ──────────────────────────────────────────────────────────────────
   let selectedYear = $state<number | null>(null);
@@ -16,6 +16,8 @@
   let mapLoading   = $state(false);
   let selectedKota = $state<KotaSearchItem | null>(null);
   let selectedBoundaryHasc = $state<string | null>(null);
+  let topKota      = $state<KotaHeatmapProperties[]>([]);
+  let compareYear  = $state<number | null>(null);
 
   // Referensi ke MapView component untuk flyTo
   let mapView: MapView;
@@ -76,6 +78,8 @@
       bind:layerMode
       bind:featureCount
       bind:loading={mapLoading}
+      bind:topKota
+      bind:compareYear
       {selectedBoundaryHasc}
     />
   </div>
@@ -86,8 +90,10 @@
       bind:selectedYear
       bind:layerMode
       bind:selectedKota
+      bind:compareYear
       {years}
       {kotaList}
+      {topKota}
       {stats}
       showingOnMap={featureCount}
       {statsLoading}
