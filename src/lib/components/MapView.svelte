@@ -440,6 +440,10 @@
             updateTriggers: {
               getFillColor: selectedYear,
             },
+            // H10: Animasi transisi warna saat tahun berubah
+            transitions: {
+              getFillColor: { duration: 500 },
+            },
           }),
         ],
       });

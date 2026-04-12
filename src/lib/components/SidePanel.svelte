@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
   import type { KotaHeatmapProperties, KotaSearchItem, LayerMode, StatsData, YearCount } from '$lib/types';
   import SearchBar from './SearchBar.svelte';
   import StatsPanel from './StatsPanel.svelte';
@@ -28,6 +29,48 @@
     selectedKota: KotaSearchItem | null;
     onSelectKota: (kota: KotaSearchItem | null) => void;
   } = $props();
+
+  // ─── C9/H10: Animasi Tahun ───────────────────────────────────────────────────
+  const yearsAsc = $derived([...years].sort((a, b) => a.year - b.year));
+  let playing = $state(false);
+  let playInterval: ReturnType<typeof setInterval> | null = null;
+
+  function currentIndex(): number {
+    return selectedYear != null ? yearsAsc.findIndex(y => y.year === selectedYear) : -1;
+  }
+
+  function pauseAnimation() {
+    playing = false;
+    if (playInterval) { clearInterval(playInterval); playInterval = null; }
+  }
+
+  function startAnimation() {
+    if (yearsAsc.length === 0) return;
+    playing = true;
+    // Mulai dari awal jika belum ada tahun terpilih atau sudah di tahun terakhir
+    const idx = currentIndex();
+    if (idx < 0 || idx >= yearsAsc.length - 1) selectedYear = yearsAsc[0].year;
+
+    playInterval = setInterval(() => {
+      const i = currentIndex();
+      if (i < 0 || i >= yearsAsc.length - 1) {
+        pauseAnimation(); // berhenti di tahun terakhir
+      } else {
+        selectedYear = yearsAsc[i + 1].year;
+      }
+    }, 1200);
+  }
+
+  function togglePlay() {
+    playing ? pauseAnimation() : startAnimation();
+  }
+
+  function resetAnimation() {
+    pauseAnimation();
+    selectedYear = null; // kembali ke "semua tahun"
+  }
+
+  onDestroy(() => { if (playInterval) clearInterval(playInterval); });
 </script>
 
 <div class="h-full flex flex-col bg-gray-900 border-l border-gray-800">
@@ -75,6 +118,51 @@
 
     <!-- Year Filter -->
     <YearDropdown {years} bind:selectedYear />
+
+    <!-- C9/H10: Animasi Tahun — slider + play/pause -->
+    {#if yearsAsc.length > 1}
+      <div class="space-y-2">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Animasi Tahun</span>
+          <span class="text-xs font-mono {playing ? 'text-orange-400' : 'text-teal-400'}">
+            {selectedYear ?? 'Semua'}
+          </span>
+        </div>
+        <!-- Scrubber -->
+        <input
+          type="range"
+          min={0}
+          max={yearsAsc.length - 1}
+          value={currentIndex() >= 0 ? currentIndex() : 0}
+          oninput={(e) => {
+            const idx = parseInt((e.target as HTMLInputElement).value, 10);
+            if (idx >= 0 && idx < yearsAsc.length) selectedYear = yearsAsc[idx].year;
+          }}
+          class="w-full h-1.5 cursor-pointer accent-teal-500"
+        />
+        <div class="flex justify-between text-[10px] text-gray-600 -mt-1">
+          <span>{yearsAsc[0].year}</span>
+          <span>{yearsAsc[yearsAsc.length - 1].year}</span>
+        </div>
+        <!-- Controls -->
+        <div class="flex items-center gap-2">
+          <button
+            onclick={togglePlay}
+            class="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors
+                   {playing
+                     ? 'bg-orange-600/80 hover:bg-orange-600 text-white'
+                     : 'bg-teal-600/80 hover:bg-teal-600 text-white'}"
+          >
+            {playing ? '⏸ Pause' : '▶ Play'}
+          </button>
+          <button
+            onclick={resetAnimation}
+            title="Reset ke semua tahun"
+            class="px-2.5 py-1.5 rounded-lg text-xs bg-gray-800 text-gray-400 hover:text-white transition-colors"
+          >⏮</button>
+        </div>
+      </div>
+    {/if}
 
     <!-- Divider -->
     <div class="border-t border-gray-800"></div>
