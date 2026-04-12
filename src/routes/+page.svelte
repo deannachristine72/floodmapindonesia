@@ -18,6 +18,7 @@
   let selectedBoundaryHasc = $state<string | null>(null);
   let topKota        = $state<KotaHeatmapProperties[]>([]);
   let allHeatmapKota = $state<KotaHeatmapProperties[]>([]);
+  let selectedProvinces = $state<string[]>([]);
 
   // Referensi ke MapView component untuk flyTo
   let mapView: MapView;
@@ -88,6 +89,7 @@
       bind:topKota
       bind:allHeatmapKota
       {selectedBoundaryHasc}
+      {selectedProvinces}
     />
   </div>
 
@@ -97,6 +99,7 @@
       bind:selectedYear
       bind:layerMode
       bind:selectedKota
+      bind:selectedProvinces
       {years}
       {kotaList}
       {topKota}

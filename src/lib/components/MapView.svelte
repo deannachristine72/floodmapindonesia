@@ -17,6 +17,7 @@
     selectedBoundaryHasc = null,
     topKota         = $bindable<KotaHeatmapProperties[]>([]),
     allHeatmapKota  = $bindable<KotaHeatmapProperties[]>([]),
+    selectedProvinces = [] as string[],
   }: {
     selectedYear: number | null;
     layerMode: LayerMode;
@@ -25,6 +26,7 @@
     selectedBoundaryHasc: string | null;
     topKota: KotaHeatmapProperties[];
     allHeatmapKota: KotaHeatmapProperties[];
+    selectedProvinces: string[];
   } = $props();
 
   // ─── State ──────────────────────────────────────────────────────────────────
@@ -376,6 +378,9 @@
     hoveredCentroid = null;
     hoveredKota = null;
 
+    // H9: Baca selectedProvinces secara sinkron sebelum await agar $effect tracking bekerja
+    const filterProvinces = selectedProvinces;
+
     const cacheKey = selectedYear != null ? String(selectedYear) : 'all';
 
     loading = true;
@@ -390,23 +395,32 @@
       const data = heatmapCache[cacheKey] as {
         features: Array<{ geometry: { type: string; coordinates: unknown }; properties: KotaHeatmapProperties }>;
       };
-      featureCount = data.features?.length ?? 0;
 
-      // H3: Build rank map
+      // H9: Filter berdasarkan provinsi yang dipilih
+      const displayFeatures = filterProvinces.length > 0
+        ? data.features.filter(f => filterProvinces.includes(f.properties.provinsi))
+        : data.features;
+
+      featureCount = displayFeatures.length;
+
+      // H3: Build rank map (dari semua data, bukan filtered, agar peringkat nasional tetap akurat)
       const sorted = [...data.features].sort(
         (a, b) => b.properties.record_count - a.properties.record_count
       );
       heatmapRankMap = new Map(sorted.map((f, i) => [f.properties.hasc_code, i + 1]));
       totalKotaCount = data.features.length;
 
-      // H4: Top 10 kota terparah
-      topKota = sorted.slice(0, 10).map(f => f.properties);
-      // H8: Semua data kota untuk export CSV
-      allHeatmapKota = sorted.map(f => f.properties);
+      // H4: Top 10 kota terparah (dari displayFeatures)
+      const displaySorted = [...displayFeatures].sort(
+        (a, b) => b.properties.record_count - a.properties.record_count
+      );
+      topKota = displaySorted.slice(0, 10).map(f => f.properties);
+      // H8: Semua data kota untuk export CSV (hanya yang tampil)
+      allHeatmapKota = displaySorted.map(f => f.properties);
 
       // H1: Update label points source — centroid tiap kota untuk zoom ≥ 7
       if (map.getSource('kota-label-points')) {
-        const labelFeatures = data.features
+        const labelFeatures = displayFeatures
           .filter(f => f.geometry)
           .map(f => ({
             type: 'Feature' as const,
@@ -425,7 +439,7 @@
             id: 'kota-heatmap',
             // H1: render di bawah label layer agar label tetap terbaca
             beforeId: 'kota-labels-layer',
-            data: data,
+            data: { type: 'FeatureCollection' as const, features: displayFeatures },
             getFillColor: (f: { properties: KotaHeatmapProperties }) => intensityToRgba(f.properties.intensity, 200),
             // H5: Tooltip hover kota — mini summary tanpa klik
             onHover: (info: { picked: boolean; object?: { properties: KotaHeatmapProperties }; x: number; y: number }) => {
@@ -443,7 +457,7 @@
             autoHighlight: true,
             highlightColor: [255, 255, 255, 60],
             updateTriggers: {
-              getFillColor: selectedYear,
+              getFillColor: [selectedYear, filterProvinces],
             },
             // H10: Animasi transisi warna saat tahun berubah
             transitions: {
