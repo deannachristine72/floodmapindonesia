@@ -6,7 +6,7 @@
   import { GeoJsonLayer, ScatterplotLayer } from 'deck.gl';
   import { fetchHeatmap, fetchCentroids, fetchBoundary } from '$lib/api';
   import { intensityToRgba, HEATMAP_LINE_COLOR, centroidSeverityColor, CENTROID_SEVERITY_CLASSES, HEATMAP_LEGEND_CLASSES } from '$lib/colorScale';
-  import type { LayerMode, PickedFeature, KotaHeatmapProperties, CentroidPoint, PolygonProperties } from '$lib/types';
+  import type { LayerMode, PickedFeature, KotaHeatmapProperties, CentroidPoint, PolygonProperties, KotaSearchItem } from '$lib/types';
 
   // ─── Props (Svelte 5 runes) ─────────────────────────────────────────────────
   let {
@@ -21,6 +21,7 @@
     selectedKotaHasc = null as string | null,
     selectedKotaBbox = null as [number, number, number, number] | null,
     dataEnabled = false,
+    kotaList = [] as KotaSearchItem[],
     onReset = () => {},
   }: {
     selectedYear: number | null;
@@ -34,6 +35,7 @@
     selectedKotaHasc: string | null;
     selectedKotaBbox: [number, number, number, number] | null;
     dataEnabled: boolean;
+    kotaList: KotaSearchItem[];
     onReset: () => void;
   } = $props();
 
@@ -149,7 +151,11 @@
       if (!dataEnabled) return;
       if (layerMode === 'heatmap') return;
       if (moveDebounce) clearTimeout(moveDebounce);
-      moveDebounce = setTimeout(() => loadData(), 400);
+      moveDebounce = setTimeout(() => {
+        loadData();
+        const b = map.getBounds();
+        updateCentroidLabels([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]);
+      }, 400);
     });
   });
 
@@ -337,16 +343,39 @@
     }
   }
 
+  // ─── Populate label kota untuk centroid mode ─────────────────────────────────
+  function updateCentroidLabels(bbox: [number, number, number, number]) {
+    if (!map || !map.getSource('kota-label-points')) return;
+
+    let labelKota: KotaSearchItem[];
+    if (selectedKotaHasc) {
+      // Kota spesifik dipilih → hanya tampilkan 1 nama
+      labelKota = kotaList.filter(k => k.hasc_code === selectedKotaHasc);
+    } else if (selectedProvinces.length > 0) {
+      // Filter provinsi aktif → tampilkan semua kota di provinsi tersebut
+      labelKota = kotaList.filter(k => selectedProvinces.includes(k.provinsi));
+    } else {
+      // Viewport-based → tampilkan kota yang centroid-nya ada di viewport
+      labelKota = kotaList.filter(k =>
+        k.centroid[0] >= bbox[0] && k.centroid[0] <= bbox[2] &&
+        k.centroid[1] >= bbox[1] && k.centroid[1] <= bbox[3]
+      );
+    }
+
+    (map.getSource('kota-label-points') as maplibregl.GeoJSONSource).setData({
+      type: 'FeatureCollection',
+      features: labelKota.map(k => ({
+        type: 'Feature' as const,
+        geometry: { type: 'Point', coordinates: k.centroid },
+        properties: { kota_name: k.kota_name },
+      })),
+    });
+  }
+
   // ─── Fetch + Render Centroid Points ──────────────────────────────────────────
   async function loadCentroids(bboxOverride?: [number, number, number, number]) {
     if (!map || !deckOverlay) return;
 
-    // H1: Bersihkan label kota saat beralih dari heatmap ke centroid
-    if (map.getSource('kota-label-points')) {
-      (map.getSource('kota-label-points') as maplibregl.GeoJSONSource).setData({
-        type: 'FeatureCollection', features: [],
-      });
-    }
     hoveredKota = null;    // H5: clear heatmap hover tooltip
     topKota = [];          // H4: clear top kota list
     allHeatmapKota = [];   // H8: clear export data
@@ -356,11 +385,14 @@
 
     // Gunakan bboxOverride (kota dipilih) atau viewport saat ini
     const bounds = map.getBounds();
+    const activeBbox: [number, number, number, number] = bboxOverride ?? [
+      bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth(),
+    ];
     const params = {
-      minLon: bboxOverride ? bboxOverride[0] : bounds.getWest(),
-      minLat: bboxOverride ? bboxOverride[1] : bounds.getSouth(),
-      maxLon: bboxOverride ? bboxOverride[2] : bounds.getEast(),
-      maxLat: bboxOverride ? bboxOverride[3] : bounds.getNorth(),
+      minLon: activeBbox[0],
+      minLat: activeBbox[1],
+      maxLon: activeBbox[2],
+      maxLat: activeBbox[3],
       year: selectedYear,
       limit: 8000,
     };
@@ -372,6 +404,9 @@
       const data = await fetchCentroids(params, dataAbort.signal);
       if (data === null) return; // request di-abort, tidak perlu update UI
       featureCount = data.meta.count;
+
+      // Populate label kota untuk centroid mode
+      updateCentroidLabels(activeBbox);
 
       deckOverlay.setProps({
         layers: [

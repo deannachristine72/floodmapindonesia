@@ -130,6 +130,7 @@
       {selectedKotaHasc}
       {selectedKotaBbox}
       {dataEnabled}
+      {kotaList}
       onReset={handleReset}
     />
   </div>
