@@ -17,7 +17,6 @@
   let selectedKota = $state<KotaSearchItem | null>(null);
   let selectedBoundaryHasc = $state<string | null>(null);
   let topKota      = $state<KotaHeatmapProperties[]>([]);
-  let compareYear  = $state<number | null>(null);
 
   // Referensi ke MapView component untuk flyTo
   let mapView: MapView;
@@ -79,7 +78,6 @@
       bind:featureCount
       bind:loading={mapLoading}
       bind:topKota
-      bind:compareYear
       {selectedBoundaryHasc}
     />
   </div>
@@ -90,7 +88,6 @@
       bind:selectedYear
       bind:layerMode
       bind:selectedKota
-      bind:compareYear
       {years}
       {kotaList}
       {topKota}

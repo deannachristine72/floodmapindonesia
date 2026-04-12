@@ -76,25 +76,3 @@ export const CENTROID_SEVERITY_CLASSES = [
   { label: '10–50 km²',  color: '#EF4444', desc: 'Besar',        size: 14 },
   { label: '> 50 km²',   color: '#9F1239', desc: 'Sangat Besar', size: 18 },
 ] as const;
-
-// ─── H7: Delta color untuk mode komparasi dua tahun ──────────────────────────
-// delta > 0 → merah (lebih buruk), delta < 0 → hijau (membaik), 0 → abu
-export function deltaColor(delta: number, maxDelta: number, alpha = 190): [number, number, number, number] {
-  if (maxDelta === 0 || delta === 0) return [100, 100, 100, alpha];
-  const t = Math.max(-1, Math.min(1, delta / maxDelta));
-  if (t < 0) {
-    // Hijau — deforestasi berkurang (membaik)
-    const a = -t;
-    return [Math.round(lerp(100, 22, a)), Math.round(lerp(130, 163, a)), Math.round(lerp(100, 74, a)), alpha];
-  }
-  // Merah — deforestasi meningkat (memburuk)
-  return [Math.round(lerp(100, 220, t)), Math.round(lerp(100, 38, t)), Math.round(lerp(100, 38, t)), alpha];
-}
-
-export const DELTA_LEGEND_CLASSES = [
-  { label: 'Meningkat tajam', color: '#DC2626', desc: '↑ Jauh lebih buruk'  },
-  { label: 'Meningkat',       color: '#F97316', desc: '↑ Lebih buruk'       },
-  { label: 'Tidak berubah',   color: '#6B7280', desc: '— Sama'              },
-  { label: 'Berkurang',       color: '#4ADE80', desc: '↓ Lebih baik'        },
-  { label: 'Berkurang tajam', color: '#16A34A', desc: '↓ Jauh lebih baik'   },
-] as const;

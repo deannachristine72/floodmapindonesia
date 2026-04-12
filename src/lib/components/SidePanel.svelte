@@ -8,7 +8,6 @@
   let {
     selectedYear = $bindable<number | null>(null),
     layerMode    = $bindable<LayerMode>('centroids'),
-    compareYear  = $bindable<number | null>(null),
     years        = [],
     kotaList     = [],
     topKota      = [] as KotaHeatmapProperties[],
@@ -20,7 +19,6 @@
   }: {
     selectedYear: number | null;
     layerMode: LayerMode;
-    compareYear: number | null;
     years: YearCount[];
     kotaList: KotaSearchItem[];
     topKota: KotaHeatmapProperties[];
@@ -30,12 +28,6 @@
     selectedKota: KotaSearchItem | null;
     onSelectKota: (kota: KotaSearchItem | null) => void;
   } = $props();
-
-  // Reset compareYear saat berpindah ke centroid mode atau primary year berubah jadi sama
-  $effect(() => {
-    if (layerMode !== 'heatmap' && compareYear !== null) compareYear = null;
-    if (compareYear !== null && compareYear === selectedYear) compareYear = null;
-  });
 </script>
 
 <div class="h-full flex flex-col bg-gray-900 border-l border-gray-800">
@@ -83,36 +75,6 @@
 
     <!-- Year Filter -->
     <YearDropdown {years} bind:selectedYear />
-
-    <!-- H7: Bandingkan Tahun (heatmap mode only) -->
-    {#if layerMode === 'heatmap'}
-      <div class="space-y-1.5 pt-1">
-        <div class="flex items-center justify-between">
-          <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Bandingkan Tahun</span>
-          {#if compareYear !== null}
-            <button
-              class="text-[11px] text-gray-500 hover:text-gray-300 transition-colors"
-              onclick={() => (compareYear = null)}
-            >Reset</button>
-          {/if}
-        </div>
-        <select
-          bind:value={compareYear}
-          class="w-full bg-gray-800 text-gray-200 text-sm rounded-lg px-3 py-2 border border-gray-700
-                 hover:border-gray-600 focus:outline-none focus:border-teal-500 cursor-pointer"
-        >
-          <option value={null}>— Tidak dibandingkan —</option>
-          {#each years.filter(y => y.year !== selectedYear) as y}
-            <option value={y.year}>{y.year} ({y.count.toLocaleString('id-ID')} event)</option>
-          {/each}
-        </select>
-        {#if compareYear !== null}
-          <div class="text-[11px] text-gray-500 leading-tight px-0.5">
-            Warna menunjukkan perubahan vs {compareYear}
-          </div>
-        {/if}
-      </div>
-    {/if}
 
     <!-- Divider -->
     <div class="border-t border-gray-800"></div>
