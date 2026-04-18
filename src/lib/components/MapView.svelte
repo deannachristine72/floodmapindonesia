@@ -697,7 +697,10 @@
   <!-- Feature Count Badge -->
   {#if !loading && featureCount > 0}
     <div class="absolute bottom-4 left-4 z-10
-                bg-black/70 text-white text-xs px-3 py-1.5 rounded-full">
+                bg-white/90 dark:bg-black/70
+                text-gray-800 dark:text-white
+                border border-gray-200/60 dark:border-transparent
+                text-xs px-3 py-1.5 rounded-full shadow-sm dark:shadow-none backdrop-blur-sm">
       {featureCount.toLocaleString('id-ID')}
       {layerMode === 'centroids' ? 'titik' : 'kab/kota'}
       {selectedYear != null ? `(${selectedYear})` : '(semua tahun)'}
@@ -707,30 +710,39 @@
   <!-- H5: Tooltip hover kota heatmap — mini summary tanpa klik -->
   {#if hoveredKota && layerMode === 'heatmap' && !pickedFeature}
     <div class="absolute z-20 pointer-events-none
-                bg-gray-900/95 border border-gray-700 text-white text-xs px-2.5 py-1.5 rounded-lg shadow-xl"
+                bg-white/98 dark:bg-gray-900/95
+                border border-gray-200 dark:border-gray-700
+                text-gray-900 dark:text-white
+                text-xs px-2.5 py-1.5 rounded-lg shadow-xl"
          style="left: {hoveredKota.x + 14}px; top: {Math.max(4, hoveredKota.y - 64)}px;">
-      <div class="font-semibold text-teal-300">{hoveredKota.kota_name}</div>
-      <div class="text-gray-400 text-[10px]">{hoveredKota.provinsi}</div>
-      <div class="text-orange-300 font-medium mt-0.5">{hoveredKota.record_count.toLocaleString('id-ID')} event</div>
+      <div class="font-semibold text-teal-600 dark:text-teal-300">{hoveredKota.kota_name}</div>
+      <div class="text-gray-500 dark:text-gray-400 text-[10px]">{hoveredKota.provinsi}</div>
+      <div class="text-orange-500 dark:text-orange-300 font-medium mt-0.5">{hoveredKota.record_count.toLocaleString('id-ID')} event</div>
     </div>
   {/if}
 
   <!-- C5: Tooltip hover centroid — mini info tanpa klik -->
   {#if hoveredCentroid && layerMode === 'centroids' && !pickedFeature}
     <div class="absolute z-20 pointer-events-none
-                bg-gray-900/95 border border-gray-700 text-white text-xs px-2.5 py-1.5 rounded-lg shadow-xl"
+                bg-white/98 dark:bg-gray-900/95
+                border border-gray-200 dark:border-gray-700
+                text-gray-900 dark:text-white
+                text-xs px-2.5 py-1.5 rounded-lg shadow-xl"
          style="left: {hoveredCentroid.x + 14}px; top: {Math.max(4, hoveredCentroid.y - 52)}px;">
-      <div class="font-semibold text-teal-300">
+      <div class="font-semibold text-teal-600 dark:text-teal-300">
         {hoveredCentroid.area.toLocaleString('id-ID', { maximumFractionDigits: 2 })} km²
       </div>
-      <div class="text-gray-400">{hoveredCentroid.year}</div>
+      <div class="text-gray-500 dark:text-gray-400">{hoveredCentroid.year}</div>
     </div>
   {/if}
 
   <!-- Info Panel — Klik Feature -->
   {#if pickedFeature}
     <div class="absolute z-10 bottom-0 left-0 right-0 w-full rounded-t-xl sm:bottom-14 sm:left-4 sm:right-auto sm:w-72 sm:rounded-xl max-h-[50vh] overflow-y-auto
-                bg-gray-900/95 text-white shadow-xl">
+                bg-white dark:bg-gray-900/95
+                text-gray-900 dark:text-white
+                border border-gray-200 dark:border-transparent
+                shadow-xl">
       <!-- Header -->
       <div class="flex items-center justify-between px-4 py-3
                   {pickedFeature.type === 'heatmap' ? 'bg-teal-700/80' : 'bg-teal-600/80'}">
@@ -754,80 +766,80 @@
           <!-- C6: Konteks administratif dari point-in-polygon lookup -->
           {#if centroidKotaContext}
             <div class="flex justify-between">
-              <span class="text-gray-400">Provinsi</span>
+              <span class="text-gray-500 dark:text-gray-400">Provinsi</span>
               <span class="text-right max-w-[60%] leading-tight">{centroidKotaContext.provinsi}</span>
             </div>
             <div class="flex justify-between">
-              <span class="text-gray-400">Kota/Kab</span>
-              <span class="font-semibold text-teal-300 text-right max-w-[60%] leading-tight">{centroidKotaContext.kota_name}</span>
+              <span class="text-gray-500 dark:text-gray-400">Kota/Kab</span>
+              <span class="font-semibold text-teal-600 dark:text-teal-300 text-right max-w-[60%] leading-tight">{centroidKotaContext.kota_name}</span>
             </div>
           {:else if !centroidKotaChecked}
-            <div class="text-gray-500 text-xs italic">Mencari lokasi…</div>
+            <div class="text-gray-400 dark:text-gray-500 text-xs italic">Mencari lokasi…</div>
           {:else}
             <div class="flex justify-between">
-              <span class="text-gray-400">Wilayah</span>
-              <span class="text-gray-500">—</span>
+              <span class="text-gray-500 dark:text-gray-400">Wilayah</span>
+              <span class="text-gray-400 dark:text-gray-500">—</span>
             </div>
           {/if}
           <div class="flex justify-between">
-            <span class="text-gray-400">UUID</span>
+            <span class="text-gray-500 dark:text-gray-400">UUID</span>
             <span class="font-mono text-xs">{p.uuid.slice(0, 12)}…</span>
           </div>
           <div class="flex justify-between">
-            <span class="text-gray-400">Luas</span>
-            <span class="font-semibold text-teal-300">{p.area_km2.toLocaleString('id-ID', { maximumFractionDigits: 2 })} km²</span>
+            <span class="text-gray-500 dark:text-gray-400">Luas</span>
+            <span class="font-semibold text-teal-600 dark:text-teal-300">{p.area_km2.toLocaleString('id-ID', { maximumFractionDigits: 2 })} km²</span>
           </div>
           <div class="flex justify-between">
-            <span class="text-gray-400">Tahun</span>
+            <span class="text-gray-500 dark:text-gray-400">Tahun</span>
             <span>{p.year}</span>
           </div>
           <div class="flex justify-between">
-            <span class="text-gray-400">Koordinat</span>
+            <span class="text-gray-500 dark:text-gray-400">Koordinat</span>
             <span class="font-mono text-xs">{pickedFeature.coordinates[0].toFixed(4)}, {pickedFeature.coordinates[1].toFixed(4)}</span>
           </div>
         {:else}
           {@const p = pickedFeature.properties as KotaHeatmapProperties}
           <div class="flex justify-between">
-            <span class="text-gray-400">Provinsi</span>
+            <span class="text-gray-500 dark:text-gray-400">Provinsi</span>
             <span>{p.provinsi}</span>
           </div>
           <div class="flex justify-between">
-            <span class="text-gray-400">Kota/Kab</span>
+            <span class="text-gray-500 dark:text-gray-400">Kota/Kab</span>
             <span class="font-semibold">{p.kota_name}</span>
           </div>
           <div class="flex justify-between">
-            <span class="text-gray-400">Jumlah Event</span>
-            <span class="font-semibold text-teal-300">{p.record_count.toLocaleString('id-ID')}</span>
+            <span class="text-gray-500 dark:text-gray-400">Jumlah Event</span>
+            <span class="font-semibold text-teal-600 dark:text-teal-300">{p.record_count.toLocaleString('id-ID')}</span>
           </div>
           <div class="flex justify-between">
-            <span class="text-gray-400">Total Luas</span>
+            <span class="text-gray-500 dark:text-gray-400">Total Luas</span>
             <span>{(p.total_area_km2 / 1000).toLocaleString('id-ID', { maximumFractionDigits: 1 })} ribu km²</span>
           </div>
           <!-- Intensity bar -->
           <div class="mt-2">
-            <div class="text-gray-400 text-xs mb-1">Intensitas Deforestasi</div>
-            <div class="w-full h-2 rounded bg-gray-700">
+            <div class="text-gray-500 dark:text-gray-400 text-xs mb-1">Intensitas Deforestasi</div>
+            <div class="w-full h-2 rounded bg-gray-200 dark:bg-gray-700">
               <div
                 class="h-2 rounded"
                 style="width:{(p.intensity * 100).toFixed(1)}%; background: rgb({Math.round(255 * p.intensity)},{Math.round(120 * (1 - p.intensity))},30)"
               ></div>
             </div>
-            <div class="text-right text-xs text-gray-400 mt-0.5">{(p.intensity * 100).toFixed(1)}%</div>
+            <div class="text-right text-xs text-gray-500 dark:text-gray-400 mt-0.5">{(p.intensity * 100).toFixed(1)}%</div>
           </div>
 
           <!-- H3: Peringkat Nasional -->
           {#if heatmapRankMap.has(p.hasc_code) && totalKotaCount > 0}
             {@const rank = heatmapRankMap.get(p.hasc_code)!}
             {@const pct = Math.max(1, Math.ceil((rank / totalKotaCount) * 100))}
-            <div class="mt-2 pt-2 border-t border-gray-700">
+            <div class="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
               <div class="flex items-center justify-between">
-                <span class="text-gray-400 text-xs">Peringkat Nasional</span>
-                <span class="font-bold text-orange-400 text-sm">
+                <span class="text-gray-500 dark:text-gray-400 text-xs">Peringkat Nasional</span>
+                <span class="font-bold text-orange-500 dark:text-orange-400 text-sm">
                   #{rank}
-                  <span class="text-gray-400 font-normal text-xs">/ {totalKotaCount}</span>
+                  <span class="text-gray-500 dark:text-gray-400 font-normal text-xs">/ {totalKotaCount}</span>
                 </span>
               </div>
-              <div class="text-[10px] text-gray-500 text-right mt-0.5">
+              <div class="text-[10px] text-gray-400 dark:text-gray-500 text-right mt-0.5">
                 {#if pct <= 10}
                   Top {pct}% deforestasi tertinggi
                 {:else}
@@ -845,9 +857,11 @@
   <!-- H2: Heatmap Legend — 4 kelas dengan nilai aktual record_count -->
   {#if layerMode === 'heatmap'}
     <div class="absolute bottom-4 right-4 z-10
-                bg-gray-900/95 backdrop-blur rounded-xl px-3 py-3 shadow-xl
-                text-xs text-white w-44">
-      <div class="font-semibold mb-2.5 text-gray-300 tracking-wide uppercase text-[10px]">
+                bg-white/95 dark:bg-gray-900/95
+                backdrop-blur rounded-xl px-3 py-3 shadow-xl
+                border border-gray-200/80 dark:border-transparent
+                text-xs text-gray-900 dark:text-white w-44">
+      <div class="font-semibold mb-2.5 text-gray-500 dark:text-gray-300 tracking-wide uppercase text-[10px]">
         Intensitas Deforestasi
       </div>
       <div class="space-y-1.5">
@@ -858,8 +872,8 @@
               style="background-color: {cls.color}; box-shadow: 0 0 4px {cls.color}88;"
             ></span>
             <div class="flex flex-col leading-tight">
-              <span class="text-white font-medium">{cls.desc}</span>
-              <span class="text-gray-400">{cls.label}</span>
+              <span class="text-gray-800 dark:text-white font-medium">{cls.desc}</span>
+              <span class="text-gray-500 dark:text-gray-400">{cls.label}</span>
             </div>
           </div>
         {/each}
@@ -870,9 +884,11 @@
   <!-- C1: Centroid Legend — ukuran & warna severity -->
   {#if layerMode === 'centroids'}
     <div class="absolute bottom-4 right-4 z-10
-                bg-gray-900/95 backdrop-blur rounded-xl px-3 py-3 shadow-xl
-                text-xs text-white w-44">
-      <div class="font-semibold mb-2.5 text-gray-300 tracking-wide uppercase text-[10px]">
+                bg-white/95 dark:bg-gray-900/95
+                backdrop-blur rounded-xl px-3 py-3 shadow-xl
+                border border-gray-200/80 dark:border-transparent
+                text-xs text-gray-900 dark:text-white w-44">
+      <div class="font-semibold mb-2.5 text-gray-500 dark:text-gray-300 tracking-wide uppercase text-[10px]">
         Luas Area Deforestasi
       </div>
       <div class="space-y-1.5">
@@ -889,13 +905,13 @@
               "
             ></span>
             <div class="flex flex-col leading-tight">
-              <span class="text-white font-medium">{cls.desc}</span>
-              <span class="text-gray-400">{cls.label}</span>
+              <span class="text-gray-800 dark:text-white font-medium">{cls.desc}</span>
+              <span class="text-gray-500 dark:text-gray-400">{cls.label}</span>
             </div>
           </div>
         {/each}
       </div>
-      <div class="mt-2.5 pt-2 border-t border-gray-700 text-gray-500 text-[10px] leading-tight">
+      <div class="mt-2.5 pt-2 border-t border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-500 text-[10px] leading-tight">
         Ukuran titik ∝ luas area
       </div>
     </div>
