@@ -304,6 +304,7 @@
     } catch (err) {
       console.error('Gagal memuat boundary kota:', err);
       errorMsg = 'Batas wilayah tidak dapat dimuat — coba geser peta lalu pilih ulang.';
+      retryFn  = null; // boundary error tidak ada retry otomatis
     }
   }
 
@@ -341,6 +342,7 @@
     } catch (err) {
       console.error('Gagal memuat boundary pulau:', err);
       errorMsg = 'Batas wilayah pulau tidak dapat dimuat.';
+      retryFn  = null;
     }
   }
 
