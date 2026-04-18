@@ -10,16 +10,16 @@
     selectedYear: number | null;
   } = $props();
 
-  // ── Derived ───────────────────────────────────────────────────────────
+  // ── Derived ───────────────────────────────────────────────────────────────
   const yearsAsc = $derived([...years].sort((a, b) => a.year - b.year));
   const maxCount = $derived(yearsAsc.reduce((m, y) => Math.max(m, y.count), 1));
   const currIdx  = $derived(
     selectedYear != null ? yearsAsc.findIndex(y => y.year === selectedYear) : -1
   );
 
-  // ── Animation state ───────────────────────────────────────────────────
+  // ── Animation state ───────────────────────────────────────────────────────
   let playing = $state(false);
-  let speed   = $state(1);      // 0.5 | 1 | 2
+  let speed   = $state(1);   // 0.5 | 1 | 2
   let loop    = $state(false);
   let timer: ReturnType<typeof setInterval> | null = null;
 
@@ -42,8 +42,7 @@
 
   function togglePlay() {
     if (playing) {
-      playing = false;
-      stopTimer();
+      playing = false; stopTimer();
     } else {
       if (!yearsAsc.length) return;
       const i = yearsAsc.findIndex(y => y.year === selectedYear);
@@ -55,40 +54,37 @@
 
   function setSpeed(s: number) {
     speed = s;
-    if (playing) startTimer(); // restart with new interval
-  }
-
-  function reset() {
-    playing = false;
-    stopTimer();
-    selectedYear = null;
+    if (playing) startTimer();
   }
 
   onDestroy(stopTimer);
 </script>
 
 {#if yearsAsc.length > 1}
-<!-- ── Floating glass panel at bottom-center of map ── -->
+<!-- ── Floating glass panel bottom-center of map ── -->
 <div
   class="absolute bottom-5 left-1/2 -translate-x-1/2 z-10
          w-[min(760px,calc(100%-2.5rem))]
-         bg-gray-900/90 backdrop-blur-md
-         border border-gray-700/50
-         rounded-2xl shadow-2xl
+         bg-white/92 dark:bg-gray-900/90
+         backdrop-blur-md
+         border border-gray-200/80 dark:border-gray-700/50
+         rounded-2xl shadow-xl dark:shadow-2xl
          px-5 pt-3.5 pb-3.5"
 >
 
-  <!-- Row 1: Histogram + Year badge ───────────────────────────────────── -->
+  <!-- Row 1: Histogram + Year badge ─────────────────────────────────────── -->
   <div class="flex items-end gap-3 mb-1">
 
-    <!-- Histogram bars (clickable) -->
+    <!-- Histogram bars -->
     <div class="flex-1 flex items-end gap-[2px] h-11">
       {#each yearsAsc as y}
         {@const barH = Math.max(3, Math.round((y.count / maxCount) * 40))}
         {@const active = y.year === selectedYear}
         <button
           class="flex-1 rounded-[2px] transition-colors duration-100
-                 {active ? 'bg-teal-400' : 'bg-gray-700 hover:bg-gray-500'}"
+                 {active
+                   ? 'bg-teal-500'
+                   : 'bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-500'}"
           style="height:{barH}px"
           onclick={() => { selectedYear = active ? null : y.year; }}
           title="{y.year}: {y.count.toLocaleString('id-ID')} kejadian"
@@ -100,7 +96,7 @@
     <!-- Year badge -->
     <div class="text-right w-20 shrink-0 pb-0.5">
       <div class="text-lg font-bold tabular-nums leading-none
-                  {playing ? 'text-orange-400' : 'text-teal-400'}">
+                  {playing ? 'text-orange-500 dark:text-orange-400' : 'text-teal-600 dark:text-teal-400'}">
         {selectedYear ?? '—'}
       </div>
       <div class="text-[9px] text-gray-500 uppercase tracking-widest mt-0.5">
@@ -112,8 +108,8 @@
     </div>
   </div>
 
-  <!-- Row 2: Year axis labels ──────────────────────────────────────────── -->
-  <div class="flex justify-between text-[9px] text-gray-600 mb-1.5 leading-none pr-[5.5rem]">
+  <!-- Row 2: Year axis labels ────────────────────────────────────────────── -->
+  <div class="flex justify-between text-[9px] text-gray-400 dark:text-gray-600 mb-1.5 leading-none pr-[5.5rem]">
     <span>{yearsAsc[0]?.year}</span>
     {#if yearsAsc.length > 8}
       {@const mid = Math.floor(yearsAsc.length / 2)}
@@ -122,7 +118,7 @@
     <span>{yearsAsc[yearsAsc.length - 1]?.year}</span>
   </div>
 
-  <!-- Row 3: Scrubber ─────────────────────────────────────────────────── -->
+  <!-- Row 3: Scrubber ──────────────────────────────────────────────────────── -->
   <input
     type="range"
     min={0}
@@ -135,35 +131,25 @@
     class="w-full h-1 cursor-pointer accent-teal-500 mb-3"
   />
 
-  <!-- Row 4: Controls ─────────────────────────────────────────────────── -->
+  <!-- Row 4: Controls ──────────────────────────────────────────────────────── -->
   <div class="flex items-center gap-2 flex-wrap">
-
-    <!-- Reset -->
-    <button
-      onclick={reset}
-      title="Reset ke semua tahun"
-      class="p-1.5 rounded-lg text-gray-500 hover:text-white hover:bg-gray-700/80
-             transition-colors text-sm leading-none"
-    >⏮</button>
 
     <!-- Play / Pause -->
     <button
       onclick={togglePlay}
       class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold
-             transition-colors min-w-[90px] justify-center
+             transition-colors min-w-[92px] justify-center
              {playing
                ? 'bg-orange-500/80 hover:bg-orange-500 text-white'
                : 'bg-teal-600/80  hover:bg-teal-600  text-white'}"
     >
       {#if playing}
-        <!-- Pause icon -->
         <svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="currentColor">
           <rect x="6"  y="4" width="4" height="16"/>
           <rect x="14" y="4" width="4" height="16"/>
         </svg>
         Pause
       {:else}
-        <!-- Play icon -->
         <svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="currentColor">
           <polygon points="5,3 19,12 5,21"/>
         </svg>
@@ -172,13 +158,17 @@
     </button>
 
     <!-- Speed selector -->
-    <div class="flex items-center bg-gray-800 rounded-lg overflow-hidden
-                border border-gray-700/50 text-[11px] font-semibold">
+    <div class="flex items-center
+                bg-gray-100  dark:bg-gray-800
+                border border-gray-300 dark:border-gray-700/50
+                rounded-lg overflow-hidden text-[11px] font-semibold">
       {#each [0.5, 1, 2] as s}
         <button
           onclick={() => setSpeed(s)}
           class="px-2.5 py-1.5 transition-colors
-                 {speed === s ? 'bg-gray-600 text-white' : 'text-gray-500 hover:text-gray-200'}"
+                 {speed === s
+                   ? 'bg-gray-300 dark:bg-gray-600 text-gray-900 dark:text-white'
+                   : 'text-gray-500 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200'}"
         >{s}×</button>
       {/each}
     </div>
@@ -186,14 +176,13 @@
     <!-- Loop toggle -->
     <button
       onclick={() => loop = !loop}
-      title={loop ? 'Loop aktif — klik untuk nonaktifkan' : 'Loop nonaktif — klik untuk aktifkan'}
+      title={loop ? 'Loop aktif' : 'Loop nonaktif'}
       class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium
              transition-colors border
              {loop
-               ? 'text-teal-400 bg-teal-900/30 border-teal-800/50'
-               : 'text-gray-500 bg-gray-800   border-gray-700/50 hover:text-gray-300'}"
+               ? 'text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-900/30 border-teal-300 dark:border-teal-800/50'
+               : 'text-gray-500 dark:text-gray-500 bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700/50 hover:text-gray-700 dark:hover:text-gray-300'}"
     >
-      <!-- Loop icon -->
       <svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none"
            stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="17 1 21 5 17 9"/>
@@ -206,11 +195,13 @@
 
     <div class="flex-1"></div>
 
-    <!-- Clear year shortcut -->
+    <!-- Clear year -->
     {#if selectedYear !== null}
       <button
-        onclick={reset}
-        class="text-[10px] text-gray-500 hover:text-teal-400 transition-colors tabular-nums"
+        onclick={() => { selectedYear = null; }}
+        class="text-[10px] text-gray-400 dark:text-gray-500
+               hover:text-teal-600 dark:hover:text-teal-400
+               transition-colors tabular-nums"
       >{selectedYear} × hapus filter</button>
     {/if}
 
