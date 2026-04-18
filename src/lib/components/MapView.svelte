@@ -663,17 +663,6 @@
   <!-- Map Container -->
   <div bind:this={mapContainer} class="w-full h-full"></div>
 
-  <!-- Tombol Reset Peta -->
-  <button
-    onclick={onReset}
-    title="Reset peta"
-    class="absolute top-14 left-2.5 z-10 bg-white/90 hover:bg-white text-gray-700
-           rounded-md px-2.5 py-1.5 text-xs font-semibold shadow transition-colors
-           flex items-center gap-1.5"
-  >
-    ↺ Reset
-  </button>
-
   <!-- Placeholder: tampil saat belum ada filter aktif -->
   {#if !dataEnabled && !loading}
     <div class="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
@@ -681,7 +670,7 @@
                   flex flex-col items-center gap-2 text-center max-w-xs shadow-2xl">
         <span class="text-3xl">🏝</span>
         <p class="text-sm font-semibold">Pilih pulau untuk melihat data</p>
-        <p class="text-xs text-gray-400">Gunakan search bar di panel kanan</p>
+        <p class="text-xs text-gray-400">Gunakan search bar di atas untuk memulai</p>
       </div>
     </div>
   {/if}

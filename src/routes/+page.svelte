@@ -33,7 +33,7 @@
   let mapView: MapView;
 
   // ── UI state ─────────────────────────────────────────────────────────────
-  let isDark       = $state(true);   // dark mode on by default
+  let isDark       = $state(false);  // light mode on by default
   let sidebarOpen  = $state(true);   // sidebar expanded by default
 
   // ── Share Link (C10) ──────────────────────────────────────────────────────
@@ -120,10 +120,8 @@
     stats                = null;
   }
 
-  // ── Reset year only ──────────────────────────────────────────────────────
-  function resetYear() {
-    selectedYear = null;
-  }
+  // ── Reset year only (used by BottomTimeline's clear button) ─────────────
+  // Full reset (navbar button) → handleReset() below
 
   // ── Search handler ───────────────────────────────────────────────────────
   function handleSearch(result: KotaSearchItem | IslandGroup | null) {
@@ -167,7 +165,7 @@
   );
   const shareTooltip = $derived(copySuccess ? 'Link tersalin! ✓' : 'Salin Link');
   const resetTooltip = $derived(
-    selectedYear ? `Reset tahun ${selectedYear}` : 'Reset Tahun'
+    dataEnabled ? 'Reset semua pilihan' : 'Belum ada pilihan'
   );
   const themeTooltip = $derived(isDark ? 'Ganti ke Light Mode' : 'Ganti ke Dark Mode');
 </script>
@@ -213,11 +211,11 @@
     <!-- ── Right-side action buttons ── -->
     <div class="flex items-center gap-0.5 shrink-0 ml-1">
 
-      <!-- Reset Year -->
+      <!-- Reset All (clears selection + returns to initial state) -->
       <NavBtn
         label={resetTooltip}
-        onclick={resetYear}
-        disabled={selectedYear === null}
+        onclick={handleReset}
+        disabled={!dataEnabled}
       >
         <!-- Counter-clockwise / reset icon -->
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none"

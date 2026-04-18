@@ -88,7 +88,12 @@
 
 <div class="relative">
   <!-- Input -->
-  <div class="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-2">
+  <div class="flex items-center gap-2
+              bg-gray-100 dark:bg-gray-800
+              border border-gray-300 dark:border-gray-700
+              rounded-lg px-3 py-2
+              focus-within:border-teal-500 dark:focus-within:border-teal-500
+              transition-colors">
     <svg class="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
     </svg>
@@ -98,30 +103,39 @@
       onfocus={() => (isFocused = true)}
       onkeydown={handleKeydown}
       placeholder="Pilih pulau atau cari kota..."
-      class="bg-transparent text-white text-sm w-full outline-none placeholder-gray-500"
+      class="bg-transparent text-gray-900 dark:text-white text-sm w-full outline-none
+             placeholder-gray-400 dark:placeholder-gray-500"
     />
     {#if searchValue.length > 0}
-      <button onclick={handleClear} class="text-gray-400 hover:text-white text-sm">
-        ✕
-      </button>
+      <button
+        onclick={handleClear}
+        class="text-gray-400 hover:text-gray-700 dark:hover:text-white text-sm transition-colors"
+      >✕</button>
     {/if}
   </div>
 
   <!-- Dropdown -->
   {#if showDropdown}
-    <div class="absolute top-full left-0 right-0 mt-1 bg-gray-800 rounded-lg shadow-xl
-                border border-gray-700 overflow-hidden z-50 max-h-72 overflow-y-auto">
+    <div class="absolute top-full left-0 right-0 mt-1
+                bg-white dark:bg-gray-800
+                rounded-lg shadow-xl
+                border border-gray-200 dark:border-gray-700
+                overflow-hidden z-50 max-h-72 overflow-y-auto">
 
-      <!-- Island Group -->
+      <!-- Island Group header -->
       {#if filteredIslands.length > 0}
-        <div class="px-3 py-1.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider
-                    border-b border-gray-700/60">
+        <div class="px-3 py-1.5 text-[10px] font-semibold
+                    text-gray-500 dark:text-gray-500
+                    uppercase tracking-wider
+                    border-b border-gray-100 dark:border-gray-700/60">
           Pilih Wilayah
         </div>
         {#each filteredIslands as island, i}
           <button
             class="w-full text-left px-3 py-2 text-sm transition-colors flex items-center gap-2
-                   {i === selectedIndex ? 'bg-teal-700/40 text-white' : 'text-gray-300 hover:bg-gray-700'}"
+                   {i === selectedIndex
+                     ? 'bg-teal-50 dark:bg-teal-700/40 text-teal-700 dark:text-white'
+                     : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'}"
             onmousedown={() => handleSelectIsland(island)}
           >
             <span class="text-base leading-none">
@@ -129,7 +143,7 @@
             </span>
             <div>
               <div class="font-medium text-sm">{island.name}</div>
-              <div class="text-[10px] text-gray-400">{island.subtitle}</div>
+              <div class="text-[10px] text-gray-500 dark:text-gray-400">{island.subtitle}</div>
             </div>
           </button>
         {/each}
@@ -137,19 +151,26 @@
 
       <!-- Kota results -->
       {#if filteredKota.length > 0}
-        <div class="px-3 py-1.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider
-                    border-b border-gray-700/60 {filteredIslands.length > 0 ? 'border-t border-gray-700/60' : ''}">
+        <div class="px-3 py-1.5 text-[10px] font-semibold
+                    text-gray-500 dark:text-gray-500
+                    uppercase tracking-wider
+                    border-b border-gray-100 dark:border-gray-700/60
+                    {filteredIslands.length > 0 ? 'border-t border-gray-100 dark:border-gray-700/60' : ''}">
           Kabupaten / Kota
         </div>
         {#each filteredKota as kota, i}
           {@const idx = filteredIslands.length + i}
           <button
             class="w-full text-left px-3 py-2 text-sm transition-colors
-                   {idx === selectedIndex ? 'bg-orange-600/30 text-white' : 'text-gray-300 hover:bg-gray-700'}"
+                   {idx === selectedIndex
+                     ? 'bg-orange-50 dark:bg-orange-600/30 text-orange-700 dark:text-white'
+                     : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'}"
             onmousedown={() => handleSelectKota(kota)}
           >
             <div class="font-medium">{kota.kota_name}</div>
-            <div class="text-xs text-gray-400">{kota.kota_type} — {kota.provinsi}</div>
+            <div class="text-xs text-gray-500 dark:text-gray-400">
+              {kota.kota_type} — {kota.provinsi}
+            </div>
           </button>
         {/each}
       {/if}
@@ -157,9 +178,13 @@
     </div>
   {/if}
 
+  <!-- No results -->
   {#if isFocused && searchValue.length >= 1 && filteredIslands.length === 0 && filteredKota.length === 0}
-    <div class="absolute top-full left-0 right-0 mt-1 bg-gray-800 rounded-lg shadow-xl
-                border border-gray-700 px-3 py-3 text-sm text-gray-400 z-50">
+    <div class="absolute top-full left-0 right-0 mt-1
+                bg-white dark:bg-gray-800
+                rounded-lg shadow-xl
+                border border-gray-200 dark:border-gray-700
+                px-3 py-3 text-sm text-gray-500 dark:text-gray-400 z-50">
       Tidak ditemukan "{searchValue}"
     </div>
   {/if}
