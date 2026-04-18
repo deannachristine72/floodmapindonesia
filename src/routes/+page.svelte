@@ -195,7 +195,7 @@
       </div>
       <div class="leading-tight hidden sm:block">
         <h1 class="text-gray-900 dark:text-white font-bold text-sm tracking-tight">
-          BanjirMap Indonesia
+          Flood Map Indonesia
         </h1>
         <p class="text-gray-500 dark:text-gray-500 text-[10px] uppercase tracking-wider">
           Peta Kejadian · 2000–2025
